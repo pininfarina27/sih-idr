@@ -18,11 +18,13 @@ function MapView({ segmentId }: { segmentId: string }) {
   const [gt, setGt] = useState<Point[]>([]);
   const [raw, setRaw] = useState<Point[]>([]);
   const [fused, setFused] = useState<Point[]>([]);
+  const [aiFused, setAiFused] = useState<Point[]>([]);
 
   useEffect(() => {
     fetch(`/data/segment_${segmentId}_gt.json`).then(r => r.json()).then(setGt);
     fetch(`/data/segment_${segmentId}_raw_dr.json`).then(r => r.json()).then(setRaw);
     fetch(`/data/segment_${segmentId}_fused.json`).then(r => r.json()).then(setFused);
+    fetch(`/data/segment_${segmentId}_ai_fused.json`).then(r => r.json()).then(setAiFused);
   }, [segmentId]);
 
   if (!gt.length) return <div className="p-8 text-center text-gray-500">Loading tracking data...</div>;
@@ -33,6 +35,7 @@ function MapView({ segmentId }: { segmentId: string }) {
   const gtPath: [number, number][] = gt.map(p => [p.lat, p.lon]);
   const rawPath: [number, number][] = raw.map(p => [p.lat, p.lon]);
   const fusedPath: [number, number][] = fused.map(p => [p.lat, p.lon]);
+  const aiPath: [number, number][] = aiFused.map(p => [p.lat, p.lon]);
 
   return (
     <div className="h-[600px] w-full rounded-xl overflow-hidden border border-gray-200 shadow-sm relative">
@@ -52,6 +55,11 @@ function MapView({ segmentId }: { segmentId: string }) {
           <Tooltip sticky>Raw Dead Reckoning (Naive Integration)</Tooltip>
         </Polyline>
 
+        {/* AI Fused - Purple */}
+        <Polyline positions={aiPath} color="#8B5CF6" weight={6}>
+          <Tooltip sticky>AI-ML Fused (GBR)</Tooltip>
+        </Polyline>
+
         {/* Fused - Blue */}
         <Polyline positions={fusedPath} color="#3B82F6" weight={5}>
           <Tooltip sticky>Classical Fusion (EKF)</Tooltip>
@@ -67,7 +75,8 @@ function MapView({ segmentId }: { segmentId: string }) {
         <h3 className="font-bold mb-2">Legend</h3>
         <div className="flex items-center gap-2 mb-1"><div className="w-4 h-1 bg-[#10B981]"></div> Ground Truth</div>
         <div className="flex items-center gap-2 mb-1"><div className="w-4 h-1 bg-[#EF4444] border-t border-dashed border-[#EF4444] bg-transparent"></div> Raw DR (Drift)</div>
-        <div className="flex items-center gap-2"><div className="w-4 h-1 bg-[#3B82F6]"></div> Fused (EKF baseline)</div>
+        <div className="flex items-center gap-2 mb-1"><div className="w-4 h-1 bg-[#3B82F6]"></div> Classical Fused (EKF)</div>
+        <div className="flex items-center gap-2"><div className="w-4 h-1 bg-[#8B5CF6]"></div> AI-ML Fused (GBR)</div>
       </div>
     </div>
   );
