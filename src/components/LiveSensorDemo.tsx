@@ -130,7 +130,11 @@ export default function LiveSensorDemo() {
       
       let adjustedSpeed = speed;
       if (mode === "walking") {
-         adjustedSpeed = Math.min(speed * 0.15, 2.0);
+         // Remove the hard cap so running is properly detected!
+         // Scale the car-trained speed down to human proportions (approx 20%)
+         // Walking shaking (model predicts ~8 m/s) -> 1.6 m/s
+         // Running shaking (model predicts ~25 m/s) -> 5.0 m/s
+         adjustedSpeed = speed * 0.22;
       }
       
       const dx = adjustedSpeed * Math.sin(s.heading * Math.PI / 180) * dt;
