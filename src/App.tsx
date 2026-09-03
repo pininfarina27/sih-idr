@@ -175,6 +175,8 @@ function LiveSensorDemo() {
   const [model, setModel] = useState<any>(null);
   const [status, setStatus] = useState("Waiting to start...");
   const [track, setTrack] = useState<[number, number][]>([]);
+  const [mode, setMode] = useState<'driving'|'walking'>('walking');
+  const [headingMode, setHeadingMode] = useState('Initializing compass...');
   
   const state = useRef({
     lat: 0, lon: 0, heading: 0, 
@@ -205,6 +207,8 @@ function LiveSensorDemo() {
       setStatus("GPS Acquired. Starting AI Fusion...");
       setIsActive(true);
       window.addEventListener('devicemotion', handleMotion);
+      window.addEventListener('deviceorientationabsolute', handleOrientation);
+      window.addEventListener('deviceorientation', handleOrientation);
     }, (err) => {
       setStatus(`GPS Error: ${err.message}. Ensure location is enabled.`);
     }, { enableHighAccuracy: true });
@@ -213,7 +217,22 @@ function LiveSensorDemo() {
   const handleStop = () => {
     setIsActive(false);
     window.removeEventListener('devicemotion', handleMotion);
+    window.removeEventListener('deviceorientationabsolute', handleOrientation);
+    window.removeEventListener('deviceorientation', handleOrientation);
     setStatus("Stopped.");
+  };
+
+  const handleOrientation = (e: any) => {
+    let h = null;
+    if (e.webkitCompassHeading) {
+      h = e.webkitCompassHeading; // iOS
+    } else if (e.absolute && e.alpha !== null) {
+      h = 360 - e.alpha; // Android
+    }
+    if (h !== null) {
+      state.current.heading = h;
+      setHeadingMode("Compass Active (Absolute)");
+    }
   };
 
   const handleMotion = (e: DeviceMotionEvent) => {
@@ -249,18 +268,27 @@ function LiveSensorDemo() {
       const features = [ay_mean, ay_std, az_std, gz_std, energy];
       const speed = predictSpeed(features, model);
       
-      const avgGyroZ = mean(s.gyroZ);
-      s.heading += (avgGyroZ * 180 / Math.PI) * dt;
+      // Note: heading is now updated by the compass! If compass failed, we fallback to gyro
+      if (headingMode.includes('Initializing')) {
+        const avgGyroZ = mean(s.gyroZ);
+        s.heading += (avgGyroZ * 180 / Math.PI) * dt;
+      }
       
-      const dx = speed * Math.sin(s.heading * Math.PI / 180) * dt;
-      const dy = speed * Math.cos(s.heading * Math.PI / 180) * dt;
+      // If walking mode, scale down the car-trained ML speed to pedestrian speeds (~1-2 m/s)
+      let adjustedSpeed = speed;
+      if (mode === 'walking') {
+         adjustedSpeed = Math.min(speed * 0.15, 2.0); // dampen the car model for foot steps
+      }
+      
+      const dx = adjustedSpeed * Math.sin(s.heading * Math.PI / 180) * dt;
+      const dy = adjustedSpeed * Math.cos(s.heading * Math.PI / 180) * dt;
       
       const [newLat, newLon] = addMetersToLatLon(s.lat, s.lon, dx, dy);
       s.lat = newLat;
       s.lon = newLon;
       
       setTrack(prev => [...prev, [newLat, newLon]]);
-      setStatus(`AI Fusion Running... Speed: ${(speed*3.6).toFixed(1)} km/h`);
+      setStatus(`AI Fusion Running... Speed: ${(adjustedSpeed*3.6).toFixed(1)} km/h`);
     }
   };
 
@@ -270,6 +298,12 @@ function LiveSensorDemo() {
         <div>
           <h2 className="text-xl font-bold">Live Sensor Demo (Mobile Only)</h2>
           <p className="text-gray-500 text-sm">{status}</p>
+          <p className="text-indigo-500 text-xs mt-1">{headingMode}</p>
+          
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => setMode('walking')} className={`px-3 py-1 text-xs rounded-full border ${mode === 'walking' ? 'bg-indigo-100 border-indigo-500 text-indigo-700' : 'bg-gray-50'}`}>🚶 Walking Mode</button>
+            <button onClick={() => setMode('driving')} className={`px-3 py-1 text-xs rounded-full border ${mode === 'driving' ? 'bg-indigo-100 border-indigo-500 text-indigo-700' : 'bg-gray-50'}`}>🚗 Driving Mode</button>
+          </div>
         </div>
         <div>
           {!isActive ? (
