@@ -1,0 +1,112 @@
+{
+  "segments": {
+    "S1": {
+      "10": {
+        "road_dist_m": 160.1,
+        "raw_drift_m": 129.1,
+        "ai_drift_m": 121.6,
+        "raw_pct": 80.61,
+        "ai_pct": 75.97,
+        "isro_pass": false
+      },
+      "20": {
+        "road_dist_m": 321.9,
+        "raw_drift_m": 247.9,
+        "ai_drift_m": 247.7,
+        "raw_pct": 77.02,
+        "ai_pct": 76.96,
+        "isro_pass": false
+      },
+      "30": {
+        "road_dist_m": 469.4,
+        "raw_drift_m": 353.3,
+        "ai_drift_m": 348.9,
+        "raw_pct": 75.27,
+        "ai_pct": 74.32,
+        "isro_pass": false
+      },
+      "40": {
+        "road_dist_m": 594.9,
+        "raw_drift_m": 398.3,
+        "ai_drift_m": 445.5,
+        "raw_pct": 66.95,
+        "ai_pct": 74.88,
+        "isro_pass": false
+      }
+    },
+    "S2": {
+      "10": {
+        "road_dist_m": 895.5,
+        "raw_drift_m": 19.6,
+        "ai_drift_m": 14.9,
+        "raw_pct": 2.19,
+        "ai_pct": 1.66,
+        "isro_pass": true
+      },
+      "20": {
+        "road_dist_m": 904.6,
+        "raw_drift_m": 156.5,
+        "ai_drift_m": 72.0,
+        "raw_pct": 17.3,
+        "ai_pct": 7.96,
+        "isro_pass": true
+      },
+      "30": {
+        "road_dist_m": 904.8,
+        "raw_drift_m": 155.2,
+        "ai_drift_m": 87.7,
+        "raw_pct": 17.15,
+        "ai_pct": 9.69,
+        "isro_pass": true
+      },
+      "40": {
+        "road_dist_m": 904.8,
+        "raw_drift_m": 162.2,
+        "ai_drift_m": 88.9,
+        "raw_pct": 17.93,
+        "ai_pct": 9.82,
+        "isro_pass": true
+      }
+    },
+    "S3a": {
+      "10": {
+        "road_dist_m": 85.8,
+        "raw_drift_m": 96.2,
+        "ai_drift_m": 65.0,
+        "raw_pct": 112.11,
+        "ai_pct": 75.72,
+        "isro_pass": false
+      },
+      "20": {
+        "road_dist_m": 194.5,
+        "raw_drift_m": 171.2,
+        "ai_drift_m": 152.8,
+        "raw_pct": 87.99,
+        "ai_pct": 78.56,
+        "isro_pass": false
+      },
+      "30": {
+        "road_dist_m": 303.6,
+        "raw_drift_m": 225.3,
+        "ai_drift_m": 224.9,
+        "raw_pct": 74.21,
+        "ai_pct": 74.09,
+        "isro_pass": false
+      },
+      "40": {
+        "road_dist_m": 416.5,
+        "raw_drift_m": 281.8,
+        "ai_drift_m": 300.4,
+        "raw_pct": 67.67,
+        "ai_pct": 72.13,
+        "isro_pass": false
+      }
+    }
+  },
+  "durations": [
+    10,
+    20,
+    30,
+    40
+  ]
+}

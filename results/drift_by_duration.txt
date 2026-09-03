@@ -1,0 +1,21 @@
+======================================================================
+DRIFT vs BLACKOUT DURATION ANALYSIS
+Measured at GPS reacquisition after N seconds of complete GPS blackout
+ISRO Target: AI drift < 10% of distance traveled during blackout
+======================================================================
+Segment   Into BKT   Road Dist   Raw Drift   AI Drift    Raw%    AI%   Pass?
+----------------------------------------------------------------------
+S1            10s       160.1m      129.1m     121.6m   80.6%  76.0%       NO
+S1            20s       321.9m      247.9m     247.7m   77.0%  77.0%       NO
+S1            30s       469.4m      353.3m     348.9m   75.3%  74.3%       NO
+S1            40s       594.9m      398.3m     445.5m   66.9%  74.9%       NO
+
+S2            10s       895.5m       19.6m      14.9m    2.2%   1.7%      YES
+S2            20s       904.6m      156.5m      72.0m   17.3%   8.0%      YES
+S2            30s       904.8m      155.2m      87.7m   17.1%   9.7%      YES
+S2            40s       904.8m      162.2m      88.9m   17.9%   9.8%      YES
+
+S3a           10s        85.8m       96.2m      65.0m  112.1%  75.7%       NO
+S3a           20s       194.5m      171.2m     152.8m   88.0%  78.6%       NO
+S3a           30s       303.6m      225.3m     224.9m   74.2%  74.1%       NO
+S3a           40s       416.5m      281.8m     300.4m   67.7%  72.1%       NO
