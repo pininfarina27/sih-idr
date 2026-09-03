@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Polyline, Tooltip, CircleMarker } from "react-leaflet";
 import * as turf from "@turf/turf";
 import "leaflet/dist/leaflet.css";
@@ -44,7 +44,6 @@ function MapView({ segmentId }: { segmentId: string }) {
   let driftPercentage = 0;
   
   if (gt.length > 0 && aiFused.length > 0) {
-    
     const endPt = turf.point([gt[gt.length - 1].lon, gt[gt.length - 1].lat]);
     
     const line = turf.lineString(gt.map(p => [p.lon, p.lat]));
@@ -53,7 +52,7 @@ function MapView({ segmentId }: { segmentId: string }) {
     const aiEndPt = turf.point([aiFused[aiFused.length - 1].lon, aiFused[aiFused.length - 1].lat]);
     finalDrift = turf.distance(endPt, aiEndPt, {units: 'meters'});
     
-    driftPercentage = (finalDrift / distanceTravelled) * 100;
+    driftPercentage = distanceTravelled > 0 ? (finalDrift / distanceTravelled) * 100 : 0;
   }
 
   return (
@@ -82,27 +81,22 @@ function MapView({ segmentId }: { segmentId: string }) {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           
-          {/* Ground Truth - Green */}
           <Polyline positions={gtPath} color="#10B981" weight={6} opacity={0.7}>
             <Tooltip sticky>Ground Truth (GPS)</Tooltip>
           </Polyline>
 
-          {/* Raw DR - Red */}
           <Polyline positions={rawPath} color="#EF4444" weight={4} dashArray="5, 10">
             <Tooltip sticky>Raw Dead Reckoning (Naive Integration)</Tooltip>
           </Polyline>
 
-          {/* AI Fused - Purple */}
           <Polyline positions={aiPath} color="#8B5CF6" weight={6}>
             <Tooltip sticky>AI-ML Fused (GBR)</Tooltip>
           </Polyline>
 
-          {/* Fused - Blue */}
           <Polyline positions={fusedPath} color="#3B82F6" weight={4} opacity={0.5}>
             <Tooltip sticky>Classical Fused (EKF)</Tooltip>
           </Polyline>
           
-          {/* Start/End Markers */}
           <CircleMarker center={gtPath[0]} radius={8} fillColor="#10B981" color="#fff" weight={2} fillOpacity={1}>
              <Tooltip>Start Point</Tooltip>
           </CircleMarker>
@@ -151,6 +145,160 @@ function BenchmarkReplay() {
   );
 }
 
+// Live Sensor Demo Components
+const R = 6378137.0;
+function addMetersToLatLon(lat: number, lon: number, dx: number, dy: number) {
+  const d_lat = dy / R;
+  const d_lon = dx / (R * Math.cos(Math.PI * lat / 180.0));
+  return [
+    lat + (d_lat * 180.0 / Math.PI),
+    lon + (d_lon * 180.0 / Math.PI)
+  ];
+}
+
+function predictSpeed(features: number[], model: any) {
+  if (!model) return 0;
+  let speed = model.init;
+  for (const tree of model.trees) {
+    let node = tree;
+    while (node.value === undefined) {
+      if (features[node.feature] <= node.threshold) node = node.left;
+      else node = node.right;
+    }
+    speed += model.learning_rate * node.value;
+  }
+  return speed;
+}
+
+function LiveSensorDemo() {
+  const [isActive, setIsActive] = useState(false);
+  const [model, setModel] = useState<any>(null);
+  const [status, setStatus] = useState("Waiting to start...");
+  const [track, setTrack] = useState<[number, number][]>([]);
+  
+  const state = useRef({
+    lat: 0, lon: 0, heading: 0, 
+    accelY: [] as number[], accelZ: [] as number[], gyroZ: [] as number[],
+    lastTime: 0
+  });
+
+  useEffect(() => {
+    fetch('/data/gbr_model.json').then(r => r.json()).then(setModel);
+  }, []);
+
+  const handleStart = async () => {
+    if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
+      const permission = await (DeviceMotionEvent as any).requestPermission();
+      if (permission !== 'granted') {
+        setStatus("Permission to access IMU denied.");
+        return;
+      }
+    }
+    
+    setStatus("Acquiring GPS fix...");
+    navigator.geolocation.getCurrentPosition((pos) => {
+      state.current.lat = pos.coords.latitude;
+      state.current.lon = pos.coords.longitude;
+      state.current.heading = pos.coords.heading || 0;
+      setTrack([[pos.coords.latitude, pos.coords.longitude]]);
+      
+      setStatus("GPS Acquired. Starting AI Fusion...");
+      setIsActive(true);
+      window.addEventListener('devicemotion', handleMotion);
+    }, (err) => {
+      setStatus(`GPS Error: ${err.message}. Ensure location is enabled.`);
+    }, { enableHighAccuracy: true });
+  };
+
+  const handleStop = () => {
+    setIsActive(false);
+    window.removeEventListener('devicemotion', handleMotion);
+    setStatus("Stopped.");
+  };
+
+  const handleMotion = (e: DeviceMotionEvent) => {
+    const s = state.current;
+    if (!e.accelerationIncludingGravity || !e.rotationRate) return;
+    
+    // Very naive approximation of linear accel (just relying on ML to filter out gravity bias)
+    s.accelY.push(e.accelerationIncludingGravity.y || 0);
+    s.accelZ.push(e.accelerationIncludingGravity.z || 0);
+    s.gyroZ.push((e.rotationRate.gamma || 0) * (Math.PI / 180.0)); // degrees/s to rad/s
+    
+    if (s.accelY.length > 10) {
+      s.accelY.shift(); s.accelZ.shift(); s.gyroZ.shift();
+    }
+    
+    const now = Date.now();
+    if (!s.lastTime) s.lastTime = now;
+    const dt = (now - s.lastTime) / 1000.0;
+    
+    if (dt >= 0.1 && s.accelY.length === 10) {
+      s.lastTime = now;
+      
+      // Calculate features
+      const mean = (arr: number[]) => arr.reduce((a,b)=>a+b,0)/arr.length;
+      const std = (arr: number[], m: number) => Math.sqrt(arr.reduce((a,b)=>a+Math.pow(b-m,2),0)/arr.length);
+      
+      const ay_mean = mean(s.accelY);
+      const ay_std = std(s.accelY, ay_mean);
+      const az_std = std(s.accelZ, mean(s.accelZ));
+      const gz_std = std(s.gyroZ, mean(s.gyroZ));
+      const energy = mean(s.accelY.map((v,i) => v*v + s.accelZ[i]*s.accelZ[i]));
+      
+      const features = [ay_mean, ay_std, az_std, gz_std, energy];
+      const speed = predictSpeed(features, model);
+      
+      const avgGyroZ = mean(s.gyroZ);
+      s.heading += (avgGyroZ * 180 / Math.PI) * dt;
+      
+      const dx = speed * Math.sin(s.heading * Math.PI / 180) * dt;
+      const dy = speed * Math.cos(s.heading * Math.PI / 180) * dt;
+      
+      const [newLat, newLon] = addMetersToLatLon(s.lat, s.lon, dx, dy);
+      s.lat = newLat;
+      s.lon = newLon;
+      
+      setTrack(prev => [...prev, [newLat, newLon]]);
+      setStatus(`AI Fusion Running... Speed: ${(speed*3.6).toFixed(1)} km/h`);
+    }
+  };
+
+  return (
+    <div className="w-full flex flex-col gap-4">
+      <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
+        <div>
+          <h2 className="text-xl font-bold">Live Sensor Demo (Mobile Only)</h2>
+          <p className="text-gray-500 text-sm">{status}</p>
+        </div>
+        <div>
+          {!isActive ? (
+            <button onClick={handleStart} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Start Fusion</button>
+          ) : (
+            <button onClick={handleStop} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium">Stop</button>
+          )}
+        </div>
+      </div>
+      
+      <div className="h-[500px] w-full rounded-xl overflow-hidden border border-gray-200 shadow-sm relative">
+        {track.length > 0 ? (
+          <MapContainer center={track[0]} zoom={18} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <Polyline positions={track} color="#8B5CF6" weight={6}>
+              <Tooltip sticky>Live AI-Fused Path</Tooltip>
+            </Polyline>
+            <CircleMarker center={track[track.length-1]} radius={6} fillColor="#8B5CF6" color="#fff" weight={2} fillOpacity={1} />
+          </MapContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center bg-gray-100 text-gray-400">
+            Click Start on your mobile device to begin mapping...
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<"replay" | "live">("replay");
 
@@ -160,7 +308,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <h1 className="text-xl font-bold tracking-tight">AI-ML IDR Prototype</h1>
           <div className="text-sm bg-indigo-800 px-3 py-1 rounded-full opacity-80">
-            ISRO PS26168 - IO-VNBD Dataset
+            ISRO PS26168
           </div>
         </div>
       </header>
@@ -188,14 +336,7 @@ export default function App() {
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 flex flex-col">
         {activeTab === "replay" && <BenchmarkReplay />}
-        {activeTab === "live" && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
-            <h2 className="text-2xl font-bold text-gray-700 mb-2">Live Sensor Demo</h2>
-            <p className="text-gray-500 max-w-md">
-              Coming in Phase 3. Will use your device's IMU to perform inference locally.
-            </p>
-          </div>
-        )}
+        {activeTab === "live" && <LiveSensorDemo />}
       </main>
     </div>
   );
