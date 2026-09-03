@@ -1,0 +1,1 @@
+{"segments": [{"id": "S1", "name": "Driving Route S1", "duration": 180, "blackout_start_ts": 123.022, "blackout_end_ts": 163.022}, {"id": "S2", "name": "Driving Route S2", "duration": 180, "blackout_start_ts": 120.011, "blackout_end_ts": 160.011}, {"id": "S3a", "name": "Driving Route S3a", "duration": 180, "blackout_start_ts": 151.421, "blackout_end_ts": 191.421}]}

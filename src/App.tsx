@@ -1,7 +1,110 @@
-import { useState } from "react";
+﻿import { useState, useEffect } from "react";
+import { MapContainer, TileLayer, Polyline, Tooltip, CircleMarker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-function App() {
+// Hack to fix Leaflet marker icons in React
+import L from "leaflet";
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
+
+interface Point { ts: number; lat: number; lon: number; speed_kmh: number; heading: number; }
+interface SegmentMeta { id: string; name: string; duration: number; blackout_start_ts: number; blackout_end_ts: number; }
+
+function MapView({ segmentId }: { segmentId: string }) {
+  const [gt, setGt] = useState<Point[]>([]);
+  const [raw, setRaw] = useState<Point[]>([]);
+  const [fused, setFused] = useState<Point[]>([]);
+
+  useEffect(() => {
+    fetch(`/data/segment_${segmentId}_gt.json`).then(r => r.json()).then(setGt);
+    fetch(`/data/segment_${segmentId}_raw_dr.json`).then(r => r.json()).then(setRaw);
+    fetch(`/data/segment_${segmentId}_fused.json`).then(r => r.json()).then(setFused);
+  }, [segmentId]);
+
+  if (!gt.length) return <div className="p-8 text-center text-gray-500">Loading tracking data...</div>;
+
+  const center: [number, number] = [gt[0].lat, gt[0].lon];
+
+  // Convert to leaflet format
+  const gtPath: [number, number][] = gt.map(p => [p.lat, p.lon]);
+  const rawPath: [number, number][] = raw.map(p => [p.lat, p.lon]);
+  const fusedPath: [number, number][] = fused.map(p => [p.lat, p.lon]);
+
+  return (
+    <div className="h-[600px] w-full rounded-xl overflow-hidden border border-gray-200 shadow-sm relative">
+      <MapContainer center={center} zoom={16} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        
+        {/* Ground Truth - Green */}
+        <Polyline positions={gtPath} color="#10B981" weight={6} opacity={0.7}>
+          <Tooltip sticky>Ground Truth (GPS)</Tooltip>
+        </Polyline>
+
+        {/* Raw DR - Red */}
+        <Polyline positions={rawPath} color="#EF4444" weight={4} dashArray="5, 10">
+          <Tooltip sticky>Raw Dead Reckoning (Naive Integration)</Tooltip>
+        </Polyline>
+
+        {/* Fused - Blue */}
+        <Polyline positions={fusedPath} color="#3B82F6" weight={5}>
+          <Tooltip sticky>Classical Fusion (EKF)</Tooltip>
+        </Polyline>
+        
+        {/* Start/End Markers */}
+        <CircleMarker center={gtPath[0]} radius={8} fillColor="#10B981" color="#fff" weight={2} fillOpacity={1}>
+           <Tooltip>Start Point</Tooltip>
+        </CircleMarker>
+      </MapContainer>
+      
+      <div className="absolute top-4 right-4 bg-white/90 backdrop-blur p-4 rounded-lg shadow-lg border border-gray-200 z-[400] text-sm">
+        <h3 className="font-bold mb-2">Legend</h3>
+        <div className="flex items-center gap-2 mb-1"><div className="w-4 h-1 bg-[#10B981]"></div> Ground Truth</div>
+        <div className="flex items-center gap-2 mb-1"><div className="w-4 h-1 bg-[#EF4444] border-t border-dashed border-[#EF4444] bg-transparent"></div> Raw DR (Drift)</div>
+        <div className="flex items-center gap-2"><div className="w-4 h-1 bg-[#3B82F6]"></div> Fused (EKF baseline)</div>
+      </div>
+    </div>
+  );
+}
+
+function BenchmarkReplay() {
+  const [meta, setMeta] = useState<{segments: SegmentMeta[]}>({segments: []});
+  const [activeSeg, setActiveSeg] = useState<string>("S1");
+
+  useEffect(() => {
+    fetch("/data/segments.json").then(r => r.json()).then(setMeta);
+  }, []);
+
+  return (
+    <div className="w-full flex flex-col gap-4">
+      <div className="flex justify-between items-end">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Benchmark Replay</h2>
+          <p className="text-gray-500">Visualizing Phase 1 Baseline against Ground Truth.</p>
+        </div>
+        <select 
+          className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 p-2.5"
+          value={activeSeg}
+          onChange={(e) => setActiveSeg(e.target.value)}
+        >
+          {meta.segments.map(s => (
+            <option key={s.id} value={s.id}>{s.name} ({s.duration}s)</option>
+          ))}
+        </select>
+      </div>
+      
+      <MapView segmentId={activeSeg} />
+    </div>
+  );
+}
+
+export default function App() {
   const [activeTab, setActiveTab] = useState<"replay" | "live">("replay");
 
   return (
@@ -10,7 +113,7 @@ function App() {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <h1 className="text-xl font-bold tracking-tight">AI-ML IDR Prototype</h1>
           <div className="text-sm bg-indigo-800 px-3 py-1 rounded-full opacity-80">
-            ISRO Problem Statement 26168
+            ISRO PS26168 - IO-VNBD Dataset
           </div>
         </div>
       </header>
@@ -37,32 +140,16 @@ function App() {
       </div>
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 flex flex-col">
-        {activeTab === "replay" && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
-            <h2 className="text-2xl font-bold text-gray-700 mb-2">Benchmark Replay Mode</h2>
-            <p className="text-gray-500 max-w-md">
-              Loads IO-VNBD dataset subset, simulates GNSS blackout, and plots Ground Truth vs Raw Dead Reckoning vs AI-Fused tracks.
-            </p>
-            <div className="mt-6 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium">
-              Coming soon
-            </div>
-          </div>
-        )}
-
+        {activeTab === "replay" && <BenchmarkReplay />}
         {activeTab === "live" && (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
             <h2 className="text-2xl font-bold text-gray-700 mb-2">Live Sensor Demo</h2>
             <p className="text-gray-500 max-w-md">
-              Uses your phone's DeviceMotion and Geolocation APIs to run the fusion pipeline live.
+              Coming in Phase 3. Will use your device's IMU to perform inference locally.
             </p>
-            <div className="mt-6 px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium">
-              Coming soon
-            </div>
           </div>
         )}
       </main>
     </div>
   );
 }
-
-export default App;
