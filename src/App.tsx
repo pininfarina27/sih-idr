@@ -1,8 +1,8 @@
-﻿import { useState } from 'react';
-import 'leaflet/dist/leaflet.css';
+import { useState } from "react";
+import "leaflet/dist/leaflet.css";
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'replay' | 'live'>('replay');
+  const [activeTab, setActiveTab] = useState<"replay" | "live">("replay");
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -18,14 +18,18 @@ function App() {
       <div className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto flex gap-4 px-4">
           <button 
-            className={\py-3 px-4 font-medium text-sm transition-colors \\}
-            onClick={() => setActiveTab('replay')}
+            className={`py-3 px-4 font-medium text-sm transition-colors ${
+              activeTab === "replay" ? "border-b-2 border-indigo-600 text-indigo-600" : "text-gray-500 hover:text-gray-800"
+            }`}
+            onClick={() => setActiveTab("replay")}
           >
             Benchmark Replay
           </button>
           <button 
-            className={\py-3 px-4 font-medium text-sm transition-colors \\}
-            onClick={() => setActiveTab('live')}
+            className={`py-3 px-4 font-medium text-sm transition-colors ${
+              activeTab === "live" ? "border-b-2 border-indigo-600 text-indigo-600" : "text-gray-500 hover:text-gray-800"
+            }`}
+            onClick={() => setActiveTab("live")}
           >
             Live Sensor Demo
           </button>
@@ -33,7 +37,7 @@ function App() {
       </div>
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 flex flex-col">
-        {activeTab === 'replay' && (
+        {activeTab === "replay" && (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
             <h2 className="text-2xl font-bold text-gray-700 mb-2">Benchmark Replay Mode</h2>
             <p className="text-gray-500 max-w-md">
@@ -45,7 +49,7 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'live' && (
+        {activeTab === "live" && (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
             <h2 className="text-2xl font-bold text-gray-700 mb-2">Live Sensor Demo</h2>
             <p className="text-gray-500 max-w-md">
