@@ -1,0 +1,112 @@
+AI-ML Intelligent Dead Reckoning (PS 26168) — Full Improvement Roadmap
+This is a complete, no-time-limit roadmap to take sih-idr from a solid 20-hour hackathon prototype to something that survives serious technical scrutiny at internal evaluation. It's organized in tiers by priority — do Tier 0 no matter what; the rest is where you get to decide how deep to go with the time you have.
+TIER 0 — Blocking issues (fix before anyone evaluates this)
+These are the things that actively undercut your credibility if a judge notices them. Nothing else matters until these are done.
+0.1 Fix the drift metric
+Problem: Drift is currently Final Error Distance / Total Distance Traveled over the whole segment, computed after GPS has already reacquired and overwritten your position. It measures nothing about blackout performance.
+Fix:
+Compute drift at the exact timestamp the blackout ends, not at the end of the recording.
+Report it as a curve, not a single number: plot drift-% vs. time-since-blackout-started. This is far more convincing than one figure, because it shows how error grows, not just where it lands.
+Store blackout_start_ts / blackout_end_ts (already in segments.json) and use them directly in MapView.tsx's calculation instead of gt.length - 1 / aiFused.length - 1.
+Add a second stat: max drift during blackout, not just drift at blackout-end — worst case matters more than the endpoint for a tunnel scenario.
+0.2 Resolve the EKF claim
+You currently claim "Classical Fusion: Extended Kalman Filter" in the README, the report, and the UI legend, but there is no EKF anywhere in the repo (only one commit exists, and it contains no fusion/filter code — just the final GBR training/export script).
+Pick one:
+(A) Implement it for real — see Tier 1.2 below. This is the better outcome and not that expensive if you timebox it.
+(B) Remove the claim — relabel that track as "Naive Heading-Integrated DR" or drop it from the UI/report entirely, and don't mention EKF in the pitch.
+Do not leave the claim in place without the code. This is the single most likely thing a technical judge asks to see.
+0.3 Verify the MAE/RMSE numbers yourself
+The 4.87 km/h MAE / 6.22 km/h RMSE numbers currently only exist as a chat summary from another AI tool, and the CSVs that would let anyone reproduce them (deep_features.csv, per-route feature CSVs) aren't in the repo.
+Fix:
+Re-run the actual evaluation yourself, save the script, and keep the raw printed output (or better, write it to a results file that gets committed).
+Don't put a number on a slide that you can't reproduce live if asked.
+0.4 Fix the false claims in the report
+"60 frames per second" (Section 2.4) — the code throttles inference to dt >= 0.1s, i.e. ~10 Hz. Change the report to say this, or actually raise the inference rate (see Tier 3).
+"allowing flawless live demonstrations" — the walking-mode scale factor (speed * 0.22) is an untested constant with a comment in the code that reads as a last-minute hack ("Remove the hard cap so running is properly detected!"). Either validate this with real walking data and report an actual error bound, or soften the claim.
+TIER 1 — Core algorithm: build a real fusion engine
+This is the highest-leverage technical work. Right now "fusion" is: use GPS directly when available, else use AI-predicted-speed + raw gyro-integrated heading. That's DR with an AI-predicted speed input, not a fusion engine. Here's what a real one looks like.
+1.1 Proper Extended Kalman Filter
+State vector, at minimum:
+x = [ position_x, position_y, velocity, heading, gyro_bias, accel_bias ]
+Prediction step: propagate position/velocity/heading using IMU (or AI-predicted speed as a pseudo-measurement) every timestep, growing the covariance matrix P.
+Update step: when GPS is available, correct the state using GPS position/velocity as a measurement, with a measurement covariance reflecting GPS accuracy (use reported HDOP/accuracy if the dataset has it, else a fixed value).
+During blackout: skip the update step entirely, only predict — covariance grows unbounded during blackout, which is exactly what you want to show (see 1.5, uncertainty visualization).
+On GPS reacquisition: run the update step normally. This naturally produces a smooth correction pulled toward GPS rather than the current implementation's instant teleport — which also happens to fix why your drift metric looked artificially good (there's no more hard "snap" to hide behind).
+This alone gives you a legitimate "Classical Fusion (EKF)" track and removes the Tier 0.2 problem properly.
+1.2 Non-holonomic constraints (NHC)
+You claim this in the README already — implement it. For a wheeled vehicle, lateral velocity in the vehicle's own frame is ~0 (a car doesn't slide sideways under normal driving). Feed this as a pseudo-measurement into the EKF: constrain the velocity component perpendicular to heading to be near zero. This alone meaningfully reduces lateral drift, which is usually the dominant error source in phone-based DR.
+1.3 Zero-velocity updates (ZUPT)
+Detect when the vehicle is actually stationary (traffic light, stop sign — very common in city driving, and your dataset includes "traffic, round-abouts, hard-braking") using accelerometer/gyro variance thresholds, and force velocity to zero at those moments. This resets accumulated velocity bias regularly instead of letting it compound for the entire blackout window — a classic, well-established DR technique, and cheap to implement.
+1.4 Sensor bias & mounting calibration
+Gyro bias: estimate during the first few seconds of stationarity (before the vehicle starts moving) rather than assuming zero bias throughout.
+IMU-to-vehicle frame alignment: a phone isn't always mounted perfectly aligned with the car's forward axis. Add a short calibration routine (e.g., using the direction of travel from GPS during the first N seconds of normal driving to estimate the phone's mounting offset) so "accel_y" reliably means "forward," not whatever axis the phone happens to be sitting in.
+1.5 Uncertainty visualization
+Once you have a real EKF, you have a covariance matrix — use it. Draw a growing uncertainty ellipse/circle around the AI-fused position on the map during blackout. This is a strong visual for judges: it shows you understand that DR isn't just "a line," it's a probability distribution that widens over time, and that your system is honest about its own confidence rather than pretending to know an exact position.
+TIER 2 — ML pipeline rigor
+2.1 Fix the train/test split methodology
+A random 80/20 row split on time-series sensor data is a data leakage risk: adjacent rows in the same drive are highly correlated (nearly identical features/labels a fraction of a second apart), so a random split likely puts near-duplicate rows in both train and test, inflating your reported accuracy.
+Fix: split by route and/or driver, not by row. Train on some full routes/drivers, test on completely unseen ones. Report both — the row-random-split number (if you want to keep it for comparison) and the route-held-out number, and be upfront that the second is the honest one. Expect the honest number to be worse; that's fine, it's more defensible than a number a judge can poke a hole in during Q&A.
+2.2 Commit the full offline pipeline
+Right now only 09_deep_train.py (final training/export step) is in the repo — the numbering implies 8 earlier steps that aren't committed. Commit the whole pipeline: data ingestion, feature extraction, the (new, real) EKF baseline generator, the train/test split logic, and the evaluation script. This is what makes your "1,070,741 rows across 72 routes and 5 drivers" claim actually verifiable instead of asserted.
+2.3 Evaluate what actually matters: integrated drift, not just speed MAE
+Speed MAE is necessary but not sufficient — it doesn't directly tell you the positional drift after integrating over a 40-second blackout. Build an evaluation harness that:
+Takes every blackout window across your test set (not just 3 hand-picked segments),
+Integrates your predicted speed + heading through each one,
+Reports the distribution of drift % — mean, median, 90th percentile, worst case — not a single cherry-picked number.
+This is much stronger evidence for ISRO's actual requirement than 3 anecdotal segment replays.
+2.4 Test across blackout durations
+Report drift-% as a function of blackout length (10s, 20s, 40s, 60s, 90s). Real tunnels vary a lot in length. A single 40-second data point doesn't tell a judge what happens in a 2-minute tunnel — showing the curve does, and demonstrates you've thought about the failure mode at the edges.
+2.5 Strengthen the case for your feature set (optional but persuasive)
+Add a quick baseline comparison: linear regression or a simple constant-speed assumption vs. your GBR, so the improvement from ML is quantified, not just asserted.
+Try a small ablation: how much does each feature (accel_y_std, accel_z_std, gyro_z_std, accel_energy) actually contribute? Even a simple feature-importance plot from scikit-learn is free and adds credibility.
+If you have time: compare GBR against a small LSTM/TCN that sees a short temporal window instead of hand-rolled rolling statistics — even if GBR wins (likely, given your data size and the value of interpretable features here), showing you evaluated alternatives is a strong signal of rigor.
+TIER 3 — Live demo improvements
+3.1 Actually demonstrate blackout handling live
+Currently the live demo takes one GPS fix at the start and then runs pure DR forever — it can't show what your pitch is about (seamless GNSS-loss handling), because there's no continuous GPS stream to fall back from.
+Fix: use navigator.geolocation.watchPosition for a continuous GPS stream, and add a manual "Simulate Blackout" toggle button. When toggled on, ignore incoming GPS updates and switch to AI-DR; when toggled off, let the EKF reconcile smoothly. This turns the live demo into an actual proof of the core claim, in front of the judges, on demand.
+3.2 Raise (or accurately report) the inference rate
+Either bump the inference loop to run closer to your claimed 60 Hz (drop the dt >= 0.1s throttle, or justify why 10 Hz is actually the right choice — e.g., battery/CPU tradeoff — and change the report to match reality either way).
+3.3 Fix or validate walking mode properly
+Collect a small amount of real walking/running IMU data and fit (or at least sanity-check) the scale factor against it instead of using a guessed 0.22 constant.
+Alternatively, train a tiny separate low-effort model for pedestrian mode, or clearly label the live demo's walking mode as "illustrative only, not validated against ground truth" in both the UI and the pitch — better to under-claim here than have a judge ask "how did you validate this constant?" and not have an answer.
+3.4 Recalibration / re-sync
+Add periodic re-alignment when GPS is available (not just once at start), so long live sessions don't accumulate uncorrected bias between demo runs.
+TIER 4 — Repository & reproducibility
+Commit everything, including the raw/intermediate CSVs (or a script + instructions to regenerate them from the public IO-VNBD dataset) so a judge can clone and reproduce your numbers, not just view a live deployment.
+Add a requirements.txt / pyproject.toml for the Python side and pin versions.
+Add a results/ directory with actual saved evaluation outputs (MAE/RMSE, drift distributions, plots) generated by a script, not asserted in prose.
+Add a simple CI check (GitHub Actions) that runs the drift-evaluation script and fails if drift-at-blackout-end regresses above your target — turns your headline claim into something continuously verified, not just tested once and screenshotted.
+Add inline comments/docstrings to the EKF and feature-engineering code — judges (and teammates) reading the code cold should be able to follow the math without you narrating it live.
+TIER 5 — Report & documentation rewrite
+Once the above changes land, the report needs a pass to match:
+Rewrite the drift methodology section to describe blackout-end measurement (or the full drift-vs-time curve), not final-segment-error.
+Rewrite or remove the EKF section to match whatever you decided in 0.2.
+Fix the 60fps and "flawless" claims per 0.4/3.2/3.3.
+Add a "Methodology & Validation" section that proactively explains the route-level train/test split — pre-empting the data-leakage question is much stronger than waiting to be asked.
+Add a "Limitations & Future Work" section. Counterintuitively, this makes the report more credible, not less — it signals you understand the edges of your own system (e.g., magnetometer reliability inside steel tunnel structures, performance on blackouts longer than tested, dependency on phone mounting orientation, no wheel-speed-sensor validation since you only used phone sensors).
+Replace single-number claims with distributions/tables throughout (drift by blackout duration, MAE by driver/route held out, etc.) — this mirrors the more rigorous evaluation from Tier 2 and reads as far more credible than adjective-heavy prose ("incredible," "flawless").
+TIER 6 — Stretch differentiators (if you truly have unlimited time)
+These aren't required, but each one would meaningfully separate this from a typical hackathon submission:
+Map matching. Snap the fused position to the nearest plausible road segment using an OSM road graph (even a simple nearest-edge snap, no need for a full particle filter). Vehicles are constrained to roads — this single addition often reduces effective position error more than any amount of sensor-fusion tuning, because it eliminates the physically-impossible off-road drift that raw DR produces.
+Sensor-health indicator. Show live whether magnetometer/gyro/accelerometer are reporting healthy data, and gracefully degrade (e.g., fall back to gyro-only heading if magnetometer readings look saturated/unreliable, which can happen inside steel-heavy tunnel structures).
+Kalman-gain blending instead of hard switch. Rather than "GPS available → use GPS; else → use AI-DR," blend the two continuously with a Kalman gain that reflects each source's trustworthiness. This is more physically correct and avoids any hard discontinuity in the track (also removes any temptation to compute drift the flawed way from Tier 0.1).
+Cross-dataset generalization test. If you can find or record even a small independent driving segment outside IO-VNBD, testing on it (even briefly) is a strong signal your model isn't just overfit to one dataset's driving style/vehicle/phone combination.
+TIER 7 — Presentation & Q&A prep
+Have a concise, honest answer ready for each of these — they're the questions a technical panel is most likely to ask given what's in your repo and report:
+"What's your drift measured at the moment GPS comes back, not at the end of the recording?" — Answer with your Tier 0.1 / Tier 2.3 numbers directly.
+"Show me your EKF implementation." — Either walk them to the code, or clearly state you use AI-predicted-speed DR with NHC/ZUPT and don't claim a classical EKF (per your Tier 0.2 decision).
+"How did you split train/test — could there be leakage?" — Explain the route-level split from Tier 2.1 proactively before they ask.
+"What happens in a 2-minute tunnel, not just 40 seconds?" — Point to your drift-vs-blackout-duration curve (Tier 2.4).
+"Did you validate this on real wheel-speed sensor data, or just a phone?" — Be upfront: phone-only, and explain why that's actually the harder and more broadly deployable case (no vehicle integration needed).
+"What if the phone isn't mounted consistently / is in a pocket?" — Reference your alignment calibration (Tier 1.4) and its limits.
+"How does this handle magnetometer interference inside a tunnel?" — This is a real limitation; have an honest answer, ideally referencing your sensor-health fallback (Tier 6) if you built it.
+Suggested build order
+If you're doing this incrementally rather than all at once, this order minimizes rework:
+Tier 0 (all of it) — unblocks any evaluation at all.
+Tier 1.1–1.3 (EKF + NHC + ZUPT) — this is the core technical credibility upgrade, and Tier 0.1's metric becomes trivial to compute correctly once the EKF naturally handles GPS reacquisition.
+Tier 2.1–2.3 — rigor around the numbers you're now generating from a better pipeline.
+Tier 5 — rewrite the report once the underlying system has actually changed (don't rewrite it twice).
+Tier 3 — live demo, since it depends on the same EKF/reacquisition logic from Tier 1.
+Tier 4 — repo hygiene, can happen in parallel with anything above.
+Tier 6 — only after everything above is solid.
+Tier 7 — final pass, once you know exactly what you built and can speak to it honestly.

@@ -1,0 +1,111 @@
+AI-ML Intelligent Dead Reckoning (IDR) — Prototype Brief
+For: SIH 2026 Internal/College Screening Hackathon (20-hour build)
+Build agent: Antigravity (Claude Opus as primary coding agent, Gemini 3 for fast local edits)
+0. What this document is
+This is a scoped-down, buildable version of the official SIH problem statement below, rewritten specifically for an internal college-level screening round with a ~20-hour build budget, one submission link (must be live/shareable), and one demo video. Nothing important from the official brief has been dropped — it's summarized in Section 1 for reference — but Sections 2 onward define a realistic subset of it that a small team can actually finish, working, in 20 hours.
+Hand this whole file to Claude Opus in Antigravity as the first message. It has everything needed to start planning and building without further back-and-forth.
+1. Official Problem Statement (reference — keep this context, don't lose it)
+Core problem: Phone-based navigation (GPS/GNSS) fails in tunnels, multi-level parking, dense forests/urban canyons, or under jamming. Most Indian vehicles (trucks, older cars, two-wheelers) have no factory INS and no OBD-II speed feed — only a dashboard-mounted smartphone. Its consumer-grade MEMS IMU (accelerometer + gyroscope) drifts exponentially within seconds if you just integrate it naively. The ask is an AI/ML-enhanced dead-reckoning + GNSS fusion engine that keeps lane-level position accuracy through a GNSS blackout and hands back to GNSS smoothly when it returns.
+Expected solution components (all six, per the official brief):
+In-vehicle alignment/calibration engine — auto-detect phone pitch/roll/yaw vs. vehicle heading, regardless of mount.
+AI speed & vibration filter — filters engine/road noise and pothole shocks, estimates forward velocity from IMU alone.
+Map-matching + kinematic constraints — snaps drifting position back onto the road graph (e.g. via Non-Holonomic Constraints — a car can't slide sideways or fly).
+GNSS+INS fusion engine — AI-based sensor fusion combining GNSS and IMU, reducing drift.
+Seamless GNSS-deficit handler — instant, sub-second mode switching between GNSS-aided and pure dead reckoning.
+Real-time navigation UI — smooth vehicle icon, no visible jumps.
+Performance benchmarks (official, must be visibly addressed):
+Dead reckoning drift < 10% of distance travelled during blackout — e.g. <5 m drift over 50 m in <1 min, OR <100 m drift over 1 km at 60 km/h (tunnel-scale).
+GNSS+INS fusion update rate: 10 Hz on smartphone; higher (~200 Hz) on FOG-IMU edge hardware (this edge part is out of scope for this round — see Section 3).
+Teams must submit preliminary AI models + a position plot inferenced from a subset of IO-VNBD as part of screening — this is a hard requirement even at this stage, not optional polish.
+2. Full solution vs. prototype — the decision, and why
+The full SIH ask spans: a production mobile app, a separate edge-deployable engine for external/FOG-grade IMUs, models trained on the full 40–58 hr dataset, live OBD-independent operation across real vehicles, and validation across two competition rounds with additional datasets provided only after screening.
+None of that is gradeable or buildable in 20 hours, and it doesn't need to be for internal screening. Screening judges are checking three things: (1) do you understand the actual hard problem (drift, calibration, map-matching, fusion — not just "we'll use GPS"), (2) can you show it working, even on a slice of data, and (3) is there a believable path to the full solution later.
+Decision: build one tight, working, demoable prototype that proves the core scientific claim — an AI/ML-enhanced fusion pipeline keeps drift within the benchmark thresholds where raw IMU dead-reckoning fails badly — wrapped in a polished, link-shareable web app with a live phone-sensor demo mode. Everything else goes in the README as "planned for the finale round," which is honest and expected at this stage.
+3. Prototype scope
+In scope (build this)
+Benchmark Replay Mode: load a subset of IO-VNBD, simulate a GNSS blackout window, and plot three tracks on a map simultaneously — ground truth, naive raw IMU dead reckoning (drifts badly — this is the problem you're proving exists), and your AI-fused track (stays close to truth). Live drift-% readout against the official thresholds.
+Live Sensor Demo Mode: a browser page that reads the presenter's own phone accelerometer/gyroscope/GPS live (no native app needed — see Section 4), lets you manually toggle "GPS lost," and shows dead reckoning kick in and hand back seamlessly. This is what you actually film walking/driving around for the video.
+A simplified but faithful implementation of all six expected-solution components (Section 4 maps each one to something concrete you'll build — nothing is silently dropped, each is just scoped down).
+A deployed, public HTTPS link (Vercel/Netlify/GitHub Pages) + a public GitHub repo with README, architecture diagram, and the required results plot.
+A demo video (script in Section 7).
+Explicitly out of scope for this round (say so in the README as future work — do not attempt)
+Native Android/iOS app, OBD-II integration.
+The standalone "edge-deployable engine" for external/FOG-grade IMUs at 200 Hz.
+Training on the full 40–58 hr / 1300–4400 km IO-VNBD dataset — use a representative subset (a few driving segments, ideally including at least one with a real or simulated tunnel/underpass).
+Production security, multi-vehicle support, offline map database bundling beyond a small extract.
+4. Recommended architecture
+No backend needed. This is a static, client-side web app (PWA) — simpler to build, trivially shareable as a link, and phone sensor APIs work fine from a deployed HTTPS static site.
+┌─────────────────────────────────────────────────────────┐
+│  Browser (PWA) — React + Vite, deployed static site      │
+│                                                            │
+│  ┌──────────────┐   ┌───────────────────┐                │
+│  │ Replay Mode  │   │  Live Sensor Mode  │                │
+│  │ (IO-VNBD)    │   │  (DeviceMotion +   │                │
+│  │ precomputed  │   │   Geolocation API) │                │
+│  │ results      │   │                    │                │
+│  └──────┬───────┘   └─────────┬──────────┘                │
+│         └──────────┬──────────┘                           │
+│                     ▼                                     │
+│   ┌─────────────────────────────────────────────────┐    │
+│   │ Fusion pipeline (TS, runs client-side)           │    │
+│   │  1. Calibration/alignment module                 │    │
+│   │  2. Motion/vibration filter (gating, ZUPT)        │    │
+│   │  3. UKF/EKF vehicle-kinematic fusion core         │    │
+│   │  4. AI/ML correction layer (learned bias/ZUPT)    │    │
+│   │  5. Map-matching + NHC snap (turf.js + OSM extract)│   │
+│   │  6. GNSS-deficit mode switcher                    │    │
+│   └─────────────────────────────────────────────────┘    │
+│                     ▼                                     │
+│   Leaflet map + live vehicle marker + drift dashboard      │
+└─────────────────────────────────────────────────────────┘
+Offline (Python, once, before the hackathon UI work):
+  IO-VNBD subset → preprocessing → train small ML correction
+  model → export results (plots + JSON tracks) → embed in web app
+Component-by-component mapping to the official 6 requirements:
+Tech stack:
+Frontend: React + Vite (TypeScript), Leaflet.js (OSM tiles) for the map, Recharts or Chart.js for the drift plot.
+Sensors: DeviceMotionEvent / DeviceOrientationEvent + Geolocation API — built into every phone browser, no app install, works the instant someone opens your link (requires HTTPS + a one-tap permission grant on iOS Safari — plan for that in the demo).
+Map matching: turf.js against a small pre-downloaded OSM extract (Overpass API) for wherever you'll film the live demo, or against the IO-VNBD route for replay mode.
+Offline ML training: Python (see Section 5), model kept small enough to either (a) reimplement its learned correction as simple weights/coefficients evaluated directly in TS, or (b) export via ONNX.js/TensorFlow.js if time allows. Prefer (a) for the 20-hour budget — it removes a whole class of in-browser-inference bugs and still is a genuine ML model, just deployed as its learned parameters rather than a runtime graph.
+Hosting: Vercel or GitHub Pages — both give an instant public HTTPS URL, which you need anyway for phone sensor permissions to work at all.
+5. Data & model plan
+Pull a subset of IO-VNBD from the GitHub repo (smartphone-recorded segments are the most relevant — the dataset includes synchronized and unsynchronized vehicle + smartphone inertial/GPS data from drives in the UK, Nigeria, and France, sampled at 10 Hz).
+Pick 2–4 driving segments, including at least one with varied dynamics (turns, hard braking) — you don't need the full 40+ hours.
+Define an artificial "GNSS blackout window" inside a segment (e.g., mask out 30–60 seconds of GPS) — this is standard practice for benchmarking DR algorithms and is exactly what the official brief's benchmark examples describe.
+Baseline (build first, on purpose): naive double-integration of raw accelerometer data through the blackout. It will drift badly — this demonstrates the problem and is a required contrast in your results plot.
+Classical fusion layer: UKF/EKF with NHC, no ML yet — already a big improvement, and your fallback if the ML layer runs out of time.
+AI/ML correction layer: a small model (gradient-boosted regressor or a tiny MLP — scikit-learn or PyTorch) trained on windowed IMU features to predict either (a) IMU bias correction or (b) zero-velocity/stationary probability (ZUPT), improving on the classical filter. This is your genuine "AI-ML" differentiator and satisfies the requirement without betting the whole prototype on a hard deep-learning problem finishing in time.
+Compute drift % vs. distance travelled for each blackout segment, compare against the official thresholds, and generate the position plot (ground truth vs. raw DR vs. fused) — this exact artifact is explicitly required in the official screening brief, so treat it as non-negotiable, not a nice-to-have.
+Export: model parameters/weights, the results plot images, and the track coordinates as JSON/GeoJSON for the web app's Replay Mode to consume directly (no need to run training or heavy inference in-browser).
+6. Deliverables checklist
+[ ] Live, public URL (test on both desktop and an actual phone browser before submitting)
+[ ] Public GitHub repo: README with problem summary, architecture diagram, benchmark results table, "how to run," and an explicit "out of scope / future work" section listing the native app + edge engine
+[ ] IO-VNBD subset results: the required position plot (GT vs. raw vs. fused) + a drift-% table vs. the official thresholds
+[ ] 3–5 minute demo video (script below)
+[ ] Check with your mentor whether the internal round also wants a slide/PPT — if so, it can be a thin restatement of the README, not new work
+7. Demo video script (aim for 3–5 minutes)
+0:00–0:30 — Problem framing: why phone GPS fails in tunnels/underpasses/urban canyons, why this matters for logistics/ride-hailing/emergency response in India.
+0:30–1:00 — Architecture walkthrough over your diagram: the six components, one sentence each.
+1:00–2:30 — Benchmark Replay Mode: show the IO-VNBD subset, trigger the blackout window, watch raw DR drift away while the fused track tracks ground truth; call out the live drift-% number vs. the official threshold.
+2:30–4:00 — Live Sensor Mode: walk or drive with the phone, toggle "GPS lost," show the mode badge flip to DEAD RECKONING and the marker keep tracking smoothly, then toggle GPS back and show the seamless handoff.
+4:00–4:30 — Recap: benchmark numbers achieved, what's built vs. what's planned for the finale (native app, edge engine, full dataset training) — this honesty reads well to judges, not as a weakness.
+8. Performance targets — surface these live in the UI, don't just claim them
+Drift must read out as < 10% of distance travelled during the simulated blackout, with a clear pass/fail indicator against the official worked examples (≤5 m/50 m in <1 min; ≤100 m/1 km at 60 km/h).
+Replay Mode should show its fusion update rate (target 10 Hz) somewhere in the dashboard, even as a static label, since it's an explicit official benchmark.
+9. 20-hour build plan
+If time runs short, cut in this order: map-matching snap (nice visual, least critical to the core claim) → Live Sensor Mode polish → UI styling. Never cut: the baseline-vs-fused comparison plot and drift-% metric — that's the one non-negotiable deliverable.
+10. Environment & tooling setup for the Antigravity agent
+(This is the "what should Antigravity install/know" section.)
+Coding agent: Claude Opus as the primary planner/implementer for this session; let Gemini handle fast small local edits if Antigravity routes that way automatically.
+Runtimes: Node.js LTS + npm/pnpm; Python 3.11+ for the offline data/training work.
+JS/TS libraries: leaflet (map), recharts or chart.js (drift plots), @turf/turf (nearest-point-on-line map-matching), optionally onnxruntime-web or tensorflow.js only if there's time for real in-browser inference — otherwise skip and evaluate the learned model's coefficients directly in TS.
+Python libraries: numpy, pandas, scipy, filterpy (or a hand-rolled UKF), scikit-learn, matplotlib, folium (for offline map sanity-checks of results), geopandas/osmnx if useful for quick road-network prototyping.
+Antigravity plugins (Settings → Customizations → Build With Google Plugins): enable the Chrome DevTools plugin — it's directly useful here for testing the PWA, checking DeviceMotion/Geolocation permission flows, and debugging the map/UI. A Web/Chrome MCP server for autonomous browser testing is also worth enabling if offered.
+Skills: Antigravity supports the open Agent Skills format (SKILL.md, same format as Claude Code — 300+ Claude Code skills have been ported and are cross-compatible) and has a /learn marketplace command for pulling in community skills by keyword. Worth searching for (not required — Claude Opus can do all of this from first principles if none are found): a Vite/React scaffolding skill, a Leaflet/mapping skill, a Python data-science/Kalman-filter skill, and a static-site deploy skill (Vercel/Netlify/GitHub Pages).
+MCP servers: a GitHub MCP server (repo creation/push straight from the agent) is the highest-value one to add here; a Vercel or Netlify MCP server if available saves manual deploy steps. Filesystem MCP is on by default.
+Deployment target: Vercel or GitHub Pages — either gives an instant public HTTPS URL, which you need anyway since phone sensor permissions require a secure context.
+Git: initialize the repo and connect the remote in hour 0, per the build plan above — don't leave this until the end.
+11. Kickoff prompt — paste this into Antigravity as your first message
+I'm building a prototype for the SIH 2026 internal hackathon problem statement 26168 (AI-ML Intelligent Dead Reckoning). I have ~20 hours total. Attached is the full scoped brief — read it in full first. Start by scaffolding the repo and deployment pipeline (Section 4 & 10) so a live shareable URL exists immediately, then work through the build plan in Section 9 phase by phase, checking in with me at the end of each phase. Do not build anything listed as out-of-scope in Section 3 — if you're ever unsure whether something is in scope, ask me rather than assuming bigger is better. The two non-negotiable deliverables are the baseline-vs-fused position plot on the IO-VNBD subset (Section 5) and the live drift-% dashboard against the official benchmark thresholds (Section 8).
+12. Non-goals / guardrails (repeat, on purpose)
+The agent should not, in this round, attempt: a native mobile app, OBD-II integration, a separate edge/FOG-IMU engine, training on the full IO-VNBD dataset, or any backend/server infrastructure. All of these belong in the README's "future work for the SIH finale" section, not in the 20-hour build. If the agent proposes any of these mid-build, redirect it back to this document.
