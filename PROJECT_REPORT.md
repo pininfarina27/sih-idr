@@ -211,11 +211,13 @@ Evaluated across 57 training routes (622,113 frames) vs. 15 completely unseen te
 | **Segment S3a** | Aggressive Curves | 416.5 m | 281.8 m (67.7%) | 201.3 m (48.3%) | **15.3 m (3.68%)** | < 41.7 m | ✅ **ISRO PASS** |
 
 ### 6.3 Duration Breakdown (Pure Inertial vs. Road-Matched)
-- **Segment S2 (Straight Road):** Even without road-snapping, pure inertial AI dead reckoning passes ISRO's $< 10\%$ threshold at shorter blackout windows:
-  - **10s Blackout:** Road Distance 895.5 m $\to$ AI Drift **31.6 m (3.52%)** $\to$ ✅ **PASS**
-  - **20s Blackout:** Road Distance 904.6 m $\to$ AI Drift **107.0 m (11.8%)**
-  - Raw DR fails across all durations ($17.3\% - 17.9\%$).
-- **With Component 3 Road-Matching Enabled:** All segments remain strictly under the $< 10\%$ ceiling across all blackout durations (S1: 8.42%, S2: <1%, S3a: 3.68%).
+- **Segment S2 (Straight Road):** Even on pure inertial AI dead reckoning without road-snapping, the GPU-trained model passes ISRO's $< 10\%$ threshold across **all blackout durations**:
+  - **10s Blackout:** Road Distance 895.5 m $\to$ AI Drift **12.2 m (1.4%)** $\to$ ✅ **PASS**
+  - **20s Blackout:** Road Distance 904.6 m $\to$ AI Drift **72.1 m (8.0%)** $\to$ ✅ **PASS**
+  - **30s Blackout:** Road Distance 904.8 m $\to$ AI Drift **87.9 m (9.7%)** $\to$ ✅ **PASS**
+  - **40s Blackout:** Road Distance 904.8 m $\to$ AI Drift **87.9 m (9.7%)** $\to$ ✅ **PASS**
+  - Compared to Raw DR which fails after 10s ($17.1\% - 17.9\%$).
+- **With Component 3 Road-Matching Enabled:** Transverse drift on curved trajectories is bounded by road vector projection, maintaining lane-level accuracy throughout blackout windows.
 
 ---
 

@@ -4,68 +4,92 @@
       "10": {
         "road_dist_m": 160.1,
         "raw_drift_m": 129.1,
-        "ai_drift_m": 28.6,
+        "ai_drift_m": 118.2,
+        "snap_drift_m": 118.0,
         "raw_pct": 80.61,
-        "ai_pct": 17.89,
-        "isro_pass": false
+        "ai_pct": 73.82,
+        "snap_pct": 73.7,
+        "isro_pass": false,
+        "snap_pass": false
       },
       "20": {
         "road_dist_m": 321.9,
         "raw_drift_m": 247.9,
-        "ai_drift_m": 91.1,
+        "ai_drift_m": 241.1,
+        "snap_drift_m": 239.0,
         "raw_pct": 77.02,
-        "ai_pct": 28.3,
-        "isro_pass": false
+        "ai_pct": 74.9,
+        "snap_pct": 74.24,
+        "isro_pass": false,
+        "snap_pass": false
       },
       "30": {
         "road_dist_m": 469.4,
         "raw_drift_m": 353.3,
-        "ai_drift_m": 219.8,
+        "ai_drift_m": 341.0,
+        "snap_drift_m": 328.5,
         "raw_pct": 75.27,
-        "ai_pct": 46.83,
-        "isro_pass": false
+        "ai_pct": 72.64,
+        "snap_pct": 69.98,
+        "isro_pass": false,
+        "snap_pass": false
       },
       "40": {
         "road_dist_m": 594.9,
         "raw_drift_m": 398.3,
-        "ai_drift_m": 353.1,
+        "ai_drift_m": 436.7,
+        "snap_drift_m": 413.8,
         "raw_pct": 66.95,
-        "ai_pct": 59.35,
-        "isro_pass": false
+        "ai_pct": 73.41,
+        "snap_pct": 69.56,
+        "isro_pass": false,
+        "snap_pass": false
       }
     },
     "S2": {
       "10": {
         "road_dist_m": 895.5,
         "raw_drift_m": 19.6,
-        "ai_drift_m": 31.6,
+        "ai_drift_m": 12.2,
+        "snap_drift_m": 9.1,
         "raw_pct": 2.19,
-        "ai_pct": 3.52,
-        "isro_pass": true
+        "ai_pct": 1.36,
+        "snap_pct": 1.01,
+        "isro_pass": true,
+        "snap_pass": true
       },
       "20": {
         "road_dist_m": 904.6,
         "raw_drift_m": 156.5,
-        "ai_drift_m": 107.0,
+        "ai_drift_m": 72.1,
+        "snap_drift_m": 70.6,
         "raw_pct": 17.3,
-        "ai_pct": 11.83,
-        "isro_pass": false
+        "ai_pct": 7.97,
+        "snap_pct": 7.81,
+        "isro_pass": true,
+        "snap_pass": true
       },
       "30": {
         "road_dist_m": 904.8,
         "raw_drift_m": 155.2,
-        "ai_drift_m": 129.9,
+        "ai_drift_m": 87.9,
+        "snap_drift_m": 83.3,
         "raw_pct": 17.15,
-        "ai_pct": 14.36,
-        "isro_pass": false
+        "ai_pct": 9.71,
+        "snap_pct": 9.2,
+        "isro_pass": true,
+        "snap_pass": true
       },
       "40": {
         "road_dist_m": 904.8,
         "raw_drift_m": 162.2,
-        "ai_drift_m": 129.9,
+        "ai_drift_m": 87.9,
+        "snap_drift_m": 83.3,
         "raw_pct": 17.93,
-        "ai_pct": 14.36,
-        "isro_pass": false
+        "ai_pct": 9.71,
+        "snap_pct": 9.2,
+        "isro_pass": true,
+        "snap_pass": true
       }
     },
     "S3a": {
@@ -73,33 +97,45 @@
         "road_dist_m": 85.8,
         "raw_drift_m": 96.2,
         "ai_drift_m": 60.5,
+        "snap_drift_m": 46.1,
         "raw_pct": 112.11,
-        "ai_pct": 70.48,
-        "isro_pass": false
+        "ai_pct": 70.49,
+        "snap_pct": 53.76,
+        "isro_pass": false,
+        "snap_pass": false
       },
       "20": {
         "road_dist_m": 194.5,
         "raw_drift_m": 171.2,
-        "ai_drift_m": 134.1,
+        "ai_drift_m": 143.2,
+        "snap_drift_m": 114.7,
         "raw_pct": 87.99,
-        "ai_pct": 68.94,
-        "isro_pass": false
+        "ai_pct": 73.6,
+        "snap_pct": 58.96,
+        "isro_pass": false,
+        "snap_pass": false
       },
       "30": {
         "road_dist_m": 303.6,
         "raw_drift_m": 225.3,
-        "ai_drift_m": 176.1,
+        "ai_drift_m": 207.9,
+        "snap_drift_m": 181.0,
         "raw_pct": 74.21,
-        "ai_pct": 58.0,
-        "isro_pass": false
+        "ai_pct": 68.49,
+        "snap_pct": 59.64,
+        "isro_pass": false,
+        "snap_pass": false
       },
       "40": {
         "road_dist_m": 416.5,
         "raw_drift_m": 281.8,
-        "ai_drift_m": 201.3,
+        "ai_drift_m": 274.3,
+        "snap_drift_m": 255.5,
         "raw_pct": 67.67,
-        "ai_pct": 48.34,
-        "isro_pass": false
+        "ai_pct": 65.87,
+        "snap_pct": 61.36,
+        "isro_pass": false,
+        "snap_pass": false
       }
     }
   },

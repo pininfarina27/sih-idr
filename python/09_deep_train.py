@@ -1,32 +1,23 @@
 import os
 import json
+import time
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import GradientBoostingRegressor
+import xgboost as xgb
 
-def export_tree(model, feature_cols):
-    init_val = float(model.init_.constant_[0][0])
-    trees_data = []
-    
-    for estimator in model.estimators_:
-        tree = estimator[0].tree_
-        
-        def build_node(node_id):
-            if tree.children_left[node_id] == -1:
-                return {"value": float(tree.value[node_id][0][0])}
-            return {
-                "feature": int(tree.feature[node_id]),
-                "threshold": float(tree.threshold[node_id]),
-                "left": build_node(tree.children_left[node_id]),
-                "right": build_node(tree.children_right[node_id])
-            }
-        trees_data.append(build_node(0))
-        
+def convert_xgb_node(node):
+    if 'leaf' in node:
+        return {'value': float(node['leaf'])}
+    feat_idx = int(node['split'][1:])
+    yes_id = node['yes']
+    no_id = node['no']
+    left_child = node['children'][0] if node['children'][0]['nodeid'] == yes_id else node['children'][1]
+    right_child = node['children'][1] if node['children'][1]['nodeid'] == no_id else node['children'][0]
     return {
-        "init": init_val,
-        "learning_rate": model.learning_rate,
-        "features": feature_cols,
-        "trees": trees_data
+        'feature': feat_idx,
+        'threshold': float(node['split_condition']),
+        'left': convert_xgb_node(left_child),
+        'right': convert_xgb_node(right_child)
     }
 
 R = 6378137.0 
@@ -39,20 +30,44 @@ def train_and_export():
     print("Loading 1M+ rows of deep features...")
     df = pd.read_csv("data/deep_features.csv")
     
-    # Optional: downsample for speed if needed, but 1M rows GBR(50 trees) takes maybe 10-20 secs.
     feature_cols = ['accel_y_mean', 'accel_y_std', 'accel_z_std', 'gyro_z_std', 'accel_energy']
+    X = df[feature_cols].values.astype(np.float32)
+    y = df['gps_speed'].values.astype(np.float32)
     
-    X = df[feature_cols].values
-    # Target in m/s: correct the 3.6x underscaling from the Android logger
-    y = df['gps_speed'].values * 3.6
-    
-    print("Training Deep Gradient Boosting Regressor (50 trees, depth 4)...")
-    model = GradientBoostingRegressor(n_estimators=50, max_depth=4, learning_rate=0.1, random_state=42)
+    # Train using the laptop's dedicated NVIDIA RTX 3050 6GB GPU (device='cuda')
+    device = 'cuda'
+    print(f"Training on NVIDIA GeForce RTX 3050 GPU (device='{device}', tree_method='hist')...")
+    t0 = time.time()
+    model = xgb.XGBRegressor(
+        n_estimators=100,
+        max_depth=5,
+        learning_rate=0.08,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        tree_method='hist',
+        device=device,
+        random_state=42
+    )
     model.fit(X, y)
+    print(f"Training completed on NVIDIA RTX 3050 GPU in {time.time()-t0:.2f} seconds!")
     
-    print("Exporting model to JSON...")
-    model_json = export_tree(model, feature_cols)
-    with open("../public/data/gbr_model.json", "w") as f:
+    # Extract raw base_score and serialized trees for TS edge inference
+    raw_json = json.loads(model.get_booster().save_raw(raw_format='json'))
+    base_score = float(raw_json['learner']['learner_model_param']['base_score'].strip('[]'))
+    
+    dump = model.get_booster().get_dump(dump_format='json')
+    trees_data = [convert_xgb_node(json.loads(d)) for d in dump]
+    
+    model_json = {
+        'init': base_score,
+        'learning_rate': 1.0,
+        'features': feature_cols,
+        'trees': trees_data
+    }
+    
+    out_json = "../public/data/gbr_model.json"
+    print(f"Exporting model to {out_json} for TypeScript client-side evaluation...")
+    with open(out_json, "w") as f:
         json.dump(model_json, f)
         
     print("Regenerating benchmark tracks for S1, S2, S3a...")
@@ -60,7 +75,7 @@ def train_and_export():
         df_feat = pd.read_csv(f"data/{sid}_features.csv")
         df_raw = pd.read_csv(f"data/{sid}.csv")
         
-        X_test = df_feat[feature_cols].values
+        X_test = df_feat[feature_cols].values.astype(np.float32)
         predicted_speeds = model.predict(X_test)
         
         track = []
@@ -81,18 +96,14 @@ def train_and_export():
                 current_heading = row['gps_heading'] if not pd.isna(row['gps_heading']) else current_heading
                 speed = row['gps_speed']
             else:
-                # Enhancement: ZUPT (Zero Velocity Update)
-                if row['accel_z_std'] < 0.35 and row['gyro_z_std'] < 0.02:
+                # ZUPT: clamp stationary noise
+                if row['accel_z_std'] < 0.20 and row['gyro_z_std'] < 0.02:
                     speed = 0.0
                 else:
                     speed = max(0.0, float(predicted_speeds[i]))
                     
-                # Enhancement: Kinematic Turning Limit
                 gyro_z = df_raw['gyro_z'].iloc[i] if not pd.isna(df_raw['gyro_z'].iloc[i]) else 0
-                max_turn_rate = max(speed / 5.0, 0.1) if speed > 0 else 0.0
-                clamped_gyro_z = np.clip(gyro_z, -max_turn_rate, max_turn_rate)
-                
-                current_heading -= np.degrees(clamped_gyro_z * dt)
+                current_heading -= np.degrees(gyro_z * dt)
                 
                 heading_rad = np.radians(current_heading)
                 dx = speed * np.sin(heading_rad) * dt
@@ -107,8 +118,7 @@ def train_and_export():
         with open(f"../public/data/segment_{sid}_ai_fused.json", "w") as f:
             json.dump(track, f)
             
-    print("Deep training complete! Model exported and tracks updated.")
+    print("GPU training & track generation complete!")
 
 if __name__ == "__main__":
     train_and_export()
-
