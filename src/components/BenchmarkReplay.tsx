@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import MapView from "./MapView";
 
 interface SegmentMeta { id: string; name: string; duration: number; }
@@ -29,7 +29,7 @@ export default function BenchmarkReplay() {
         </select>
       </div>
       
-      <MapView segmentId={activeSeg} />
+      <MapView key={activeSeg} segmentId={activeSeg} />
     </div>
   );
 }

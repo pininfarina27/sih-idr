@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 import numpy as np
 import pandas as pd
@@ -43,10 +43,10 @@ def train_and_export():
     feature_cols = ['accel_y_mean', 'accel_y_std', 'accel_z_std', 'gyro_z_std', 'accel_energy']
     
     X = df[feature_cols].values
-    y = df['gps_speed'].values
+    # Target in m/s: correct the 3.6x underscaling from the Android logger
+    y = df['gps_speed'].values * 3.6
     
     print("Training Deep Gradient Boosting Regressor (50 trees, depth 4)...")
-    # Deeper, more estimators for much better accuracy
     model = GradientBoostingRegressor(n_estimators=50, max_depth=4, learning_rate=0.1, random_state=42)
     model.fit(X, y)
     
@@ -81,9 +81,18 @@ def train_and_export():
                 current_heading = row['gps_heading'] if not pd.isna(row['gps_heading']) else current_heading
                 speed = row['gps_speed']
             else:
-                speed = predicted_speeds[i]
+                # Enhancement: ZUPT (Zero Velocity Update)
+                if row['accel_z_std'] < 0.35 and row['gyro_z_std'] < 0.02:
+                    speed = 0.0
+                else:
+                    speed = max(0.0, float(predicted_speeds[i]))
+                    
+                # Enhancement: Kinematic Turning Limit
                 gyro_z = df_raw['gyro_z'].iloc[i] if not pd.isna(df_raw['gyro_z'].iloc[i]) else 0
-                current_heading -= np.degrees(gyro_z * dt)
+                max_turn_rate = max(speed / 5.0, 0.1) if speed > 0 else 0.0
+                clamped_gyro_z = np.clip(gyro_z, -max_turn_rate, max_turn_rate)
+                
+                current_heading -= np.degrees(clamped_gyro_z * dt)
                 
                 heading_rad = np.radians(current_heading)
                 dx = speed * np.sin(heading_rad) * dt

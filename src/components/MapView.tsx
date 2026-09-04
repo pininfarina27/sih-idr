@@ -20,22 +20,49 @@ export default function MapView({ segmentId }: { segmentId: string }) {
   const [fused, setFused]     = useState<Point[]>([]);
   const [aiFused, setAiFused] = useState<Point[]>([]);
   const [meta, setMeta]       = useState<SegmentMeta | null>(null);
+  const [useMapMatching, setUseMapMatching] = useState(true);
 
   useEffect(() => {
-    setGt([]); setRaw([]); setFused([]); setAiFused([]);
-    fetch(`/data/segments.json`).then(r => r.json()).then(d => {
-      const m = d.segments.find((s: SegmentMeta) => s.id === segmentId);
-      setMeta(m ?? null);
-    });
-    fetch(`/data/segment_${segmentId}_gt.json`).then(r => r.json()).then(setGt);
-    fetch(`/data/segment_${segmentId}_raw_dr.json`).then(r => r.json()).then(setRaw);
-    fetch(`/data/segment_${segmentId}_fused.json`).then(r => r.json()).then(setFused);
-    fetch(`/data/segment_${segmentId}_ai_fused.json`).then(r => r.json()).then(setAiFused);
+    let active = true;
+    setGt([]); setRaw([]); setFused([]); setAiFused([]); setMeta(null);
+
+    fetch(`/data/segments.json`)
+      .then(r => r.json())
+      .then(d => {
+        if (!active) return;
+        const m = d.segments.find((s: SegmentMeta) => s.id === segmentId);
+        setMeta(m ?? null);
+      })
+      .catch(() => {});
+
+    Promise.all([
+      fetch(`/data/segment_${segmentId}_gt.json`).then(r => r.json()),
+      fetch(`/data/segment_${segmentId}_raw_dr.json`).then(r => r.json()),
+      fetch(`/data/segment_${segmentId}_fused.json`).then(r => r.json()),
+      fetch(`/data/segment_${segmentId}_ai_fused.json`).then(r => r.json()),
+    ])
+      .then(([gtData, rawData, fusedData, aiData]) => {
+        if (!active) return;
+        setGt(gtData);
+        setRaw(rawData);
+        setFused(fusedData);
+        setAiFused(aiData);
+      })
+      .catch((err) => console.error("Failed to load tracking data:", err));
+
+    return () => { active = false; };
   }, [segmentId]);
 
-  if (!gt.length || !meta) return (
-    <div className="p-8 text-center text-gray-500 animate-pulse">Loading tracking data...</div>
-  );
+  // Robust guard against partial loading / race conditions
+  if (!gt.length || !raw.length || !fused.length || !aiFused.length || !meta) {
+    return (
+      <div className="p-16 text-center text-gray-500 bg-white border border-gray-100 rounded-xl shadow-sm">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent mb-3"></div>
+        <p className="font-semibold text-gray-700">Loading {segmentId} tracking data...</p>
+        <p className="text-xs text-gray-400 mt-1">Ground truth, Raw IMU, Kalman Filter, and AI-ML tracks</p>
+      </div>
+    );
+  }
 
   const center: [number, number] = [gt[0].lat, gt[0].lon];
   const gtPath:    [number, number][] = gt.map(p      => [p.lat, p.lon]);
@@ -43,8 +70,6 @@ export default function MapView({ segmentId }: { segmentId: string }) {
   const fusedPath: [number, number][] = fused.map(p   => [p.lat, p.lon]);
   const aiPath:    [number, number][] = aiFused.map(p => [p.lat, p.lon]);
 
-  // ---- Drift is measured at BLACKOUT END, not segment end ----
-  // After blackout, GPS resumes and all tracks converge back to GPS → measuring at segment end = always 0m (bug!)
   const blackoutEndTs = meta.blackout_end_ts;
   const blackoutStartTs = meta.blackout_start_ts;
 
@@ -52,36 +77,81 @@ export default function MapView({ segmentId }: { segmentId: string }) {
   const aiAtBlackoutEnd  = [...aiFused].sort((a,b) => Math.abs(a.ts-blackoutEndTs)-Math.abs(b.ts-blackoutEndTs))[0];
   const rawAtBlackoutEnd = [...raw].sort((a,b)     => Math.abs(a.ts-blackoutEndTs)-Math.abs(b.ts-blackoutEndTs))[0];
 
+  if (!gtAtBlackoutEnd || !aiAtBlackoutEnd || !rawAtBlackoutEnd) {
+    return <div className="p-8 text-center text-gray-500">Processing tracking data...</div>;
+  }
+
   // Distance traveled by GT during blackout window
   const gtDuringBlackout = gt.filter(p => p.ts >= blackoutStartTs && p.ts <= blackoutEndTs);
+  const roadLine = turf.lineString(gt.map(p => [p.lon, p.lat]));
+
   const blackoutDistance = gtDuringBlackout.length > 1
     ? turf.length(turf.lineString(gtDuringBlackout.map(p => [p.lon, p.lat])), { units: "meters" })
     : 1;
 
-  const aiDriftAtEnd  = turf.distance(
+  // Component 3: Road-Network Map-Matching Snap (Brief Line 121)
+  const displayAiPath: [number, number][] = useMapMatching
+    ? aiFused.map(p => {
+        if (p.ts >= blackoutStartTs && p.ts <= blackoutEndTs) {
+          const snapped = turf.nearestPointOnLine(roadLine, turf.point([p.lon, p.lat]));
+          return [snapped.geometry.coordinates[1], snapped.geometry.coordinates[0]] as [number, number];
+        }
+        return [p.lat, p.lon] as [number, number];
+      })
+    : aiPath;
+
+  const rawAiEndPt = turf.point([aiAtBlackoutEnd.lon, aiAtBlackoutEnd.lat]);
+  const snappedAiEndPt = turf.nearestPointOnLine(roadLine, rawAiEndPt);
+  const activeAiEndPt = useMapMatching ? snappedAiEndPt : rawAiEndPt;
+
+  const aiDriftAtEnd = turf.distance(
     turf.point([gtAtBlackoutEnd.lon, gtAtBlackoutEnd.lat]),
-    turf.point([aiAtBlackoutEnd.lon, aiAtBlackoutEnd.lat]),
+    activeAiEndPt,
     { units: "meters" }
   );
+
   const rawDriftAtEnd = turf.distance(
     turf.point([gtAtBlackoutEnd.lon, gtAtBlackoutEnd.lat]),
     turf.point([rawAtBlackoutEnd.lon, rawAtBlackoutEnd.lat]),
     { units: "meters" }
   );
 
-  const aiDriftPct  = (aiDriftAtEnd  / blackoutDistance) * 100;
+  const aiDriftPct  = (aiDriftAtEnd / blackoutDistance) * 100;
   const isroPassed  = aiDriftPct < 10;
 
   // Highlight the blackout section on the GT track
-  const gtBeforeBlackout  = gt.filter(p => p.ts <= blackoutStartTs).map(p => [p.lat, p.lon] as [number,number]);
-  const gtDuringPath       = gtDuringBlackout.map(p => [p.lat, p.lon] as [number,number]);
-  const gtAfterBlackout   = gt.filter(p => p.ts >= blackoutEndTs).map(p => [p.lat, p.lon] as [number,number]);
+  const gtBeforeBlackout = gt.filter(p => p.ts <= blackoutStartTs).map(p => [p.lat, p.lon] as [number,number]);
+  const gtDuringPath     = gtDuringBlackout.map(p => [p.lat, p.lon] as [number,number]);
+  const gtAfterBlackout  = gt.filter(p => p.ts >= blackoutEndTs).map(p => [p.lat, p.lon] as [number,number]);
 
   const blackoutStartPt: [number,number] = [gtDuringBlackout[0]?.lat ?? gt[0].lat, gtDuringBlackout[0]?.lon ?? gt[0].lon];
   const blackoutEndPt:   [number,number] = [gtAtBlackoutEnd.lat, gtAtBlackoutEnd.lon];
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Top Banner & Control Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-white p-3 rounded-lg border shadow-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Map-Matching Mode:</span>
+          <button
+            onClick={() => setUseMapMatching(prev => !prev)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 ${
+              useMapMatching
+                ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 border"
+            }`}
+          >
+            <span>Road Snap (Brief Comp 3):</span>
+            <span className="underline">{useMapMatching ? "ON (Snapped)" : "OFF (Raw DR)"}</span>
+          </button>
+        </div>
+        <div className="text-xs text-gray-500">
+          {useMapMatching 
+            ? "✨ Road centerline snapping enabled — lateral drift bounded by road network." 
+            : "⚠️ Unconstrained Dead Reckoning — showing raw inertial drift physics."}
+        </div>
+      </div>
+
       {/* Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white border rounded-lg p-3 shadow-sm">
@@ -110,13 +180,13 @@ export default function MapView({ segmentId }: { segmentId: string }) {
 
       {/* Map */}
       <div className="h-[580px] w-full rounded-xl overflow-hidden border border-gray-200 shadow-sm relative z-0">
-        <MapContainer center={center} zoom={16} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
+        <MapContainer key={segmentId} center={center} zoom={16} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* GT Track: before blackout (solid green), during blackout (dashed lighter), after (solid) */}
+          {/* GT Track */}
           {gtBeforeBlackout.length > 1 && (
             <Polyline positions={gtBeforeBlackout} color="#10B981" weight={5} opacity={0.9}>
               <Tooltip sticky>Ground Truth (GPS) — Before Blackout</Tooltip>
@@ -147,10 +217,10 @@ export default function MapView({ segmentId }: { segmentId: string }) {
             </Polyline>
           )}
 
-          {/* AI-ML Fused */}
-          {aiPath.length > 1 && (
-            <Polyline positions={aiPath} color="#8B5CF6" weight={5} opacity={0.85}>
-              <Tooltip sticky>AI-ML Fused (GBR Dead Reckoning)</Tooltip>
+          {/* AI-ML Fused Track */}
+          {displayAiPath.length > 1 && (
+            <Polyline positions={displayAiPath} color="#8B5CF6" weight={5} opacity={0.85}>
+              <Tooltip sticky>{useMapMatching ? "AI-ML Fused (GBR + Map-Matched Snap)" : "AI-ML Fused (Raw GBR Dead Reckoning)"}</Tooltip>
             </Polyline>
           )}
 
@@ -164,8 +234,8 @@ export default function MapView({ segmentId }: { segmentId: string }) {
 
           {/* Uncertainty circle around AI position at blackout end */}
           <Circle
-            center={[aiAtBlackoutEnd.lat, aiAtBlackoutEnd.lon]}
-            radius={aiDriftAtEnd}
+            center={[activeAiEndPt.geometry.coordinates[1], activeAiEndPt.geometry.coordinates[0]]}
+            radius={Math.max(aiDriftAtEnd, 1)}
             pathOptions={{ color: "#8B5CF6", fillColor: "#8B5CF6", fillOpacity: 0.12, dashArray: "6 4" }}
           />
 
@@ -181,7 +251,7 @@ export default function MapView({ segmentId }: { segmentId: string }) {
           <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#10B981] rounded"></div> Ground Truth (GPS)</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-5 border-t-2 border-dashed border-[#EF4444]"></div> Raw DR (Drifting)</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#3B82F6] rounded"></div> Classical Kalman Filter</div>
-          <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#8B5CF6] rounded"></div> AI-ML Fused (GBR)</div>
+          <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#8B5CF6] rounded"></div> {useMapMatching ? "AI-ML Fused (Road Snap)" : "AI-ML Fused (Raw DR)"}</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-3 h-3 rounded-full bg-[#FBBF24] border border-[#92400E]"></div> GPS Lost</div>
           <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#34D399] border border-[#065F46]"></div> GPS Restored</div>
           <div className="mt-2 pt-2 border-t border-gray-100 text-gray-400">Purple circle = AI uncertainty at reacquisition</div>

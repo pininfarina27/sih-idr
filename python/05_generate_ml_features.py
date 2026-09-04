@@ -1,4 +1,4 @@
-﻿import os
+import os
 import pandas as pd
 import numpy as np
 
@@ -12,7 +12,7 @@ def generate_features(segment_id, window_size=10):
     # Calculate rolling statistics
     features = pd.DataFrame()
     features['time_ms'] = df['time_ms']
-    features['gps_speed'] = df['gps_speed'] * (1000.0 / 3600.0) # Target in m/s
+    features['gps_speed'] = df['gps_speed'] # Target in m/s (Location.getSpeed from IO-VNBD is in m/s)
     features['gps_heading'] = df['gps_heading']
     features['lat'] = df['lat']
     features['lon'] = df['lon']
