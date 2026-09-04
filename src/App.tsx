@@ -2,6 +2,7 @@ import { useState } from "react";
 import BenchmarkReplay from "./components/BenchmarkReplay";
 import LiveSensorDemo from "./components/LiveSensorDemo";
 import DriftChart from "./components/DriftChart";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 type Tab = "replay" | "live" | "evaluation";
 
@@ -47,9 +48,11 @@ export default function App() {
       </div>
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 flex flex-col">
-        {activeTab === "replay"     && <BenchmarkReplay />}
-        {activeTab === "evaluation" && <DriftChart />}
-        {activeTab === "live"       && <LiveSensorDemo />}
+        <ErrorBoundary>
+          {activeTab === "replay"     && <BenchmarkReplay />}
+          {activeTab === "evaluation" && <DriftChart />}
+          {activeTab === "live"       && <LiveSensorDemo />}
+        </ErrorBoundary>
       </main>
     </div>
   );

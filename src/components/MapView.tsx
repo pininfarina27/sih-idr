@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { MapContainer, TileLayer, Polyline, Tooltip, CircleMarker, Circle, GeoJSON } from "react-leaflet";
+import { useState, useEffect } from "react";
+import { MapContainer, TileLayer, Polyline, Tooltip, CircleMarker, Circle } from "react-leaflet";
 import * as turf from "@turf/turf";
 import "leaflet/dist/leaflet.css";
 
@@ -11,7 +11,15 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
-interface Point { ts: number; lat: number; lon: number; speed_kmh: number; heading: number; }
+interface Point {
+  ts: number;
+  lat: number;
+  lon: number;
+  speed_kmh: number;
+  heading: number;
+  snap_lat?: number;
+  snap_lon?: number;
+}
 interface SegmentMeta { id: string; name: string; duration: number; blackout_start_ts: number; blackout_end_ts: number; }
 
 export default function MapView({ segmentId }: { segmentId: string }) {
@@ -19,13 +27,12 @@ export default function MapView({ segmentId }: { segmentId: string }) {
   const [raw, setRaw]         = useState<Point[]>([]);
   const [fused, setFused]     = useState<Point[]>([]);
   const [aiFused, setAiFused] = useState<Point[]>([]);
-  const [osmRoads, setOsmRoads] = useState<any>(null);
   const [meta, setMeta]       = useState<SegmentMeta | null>(null);
   const [useMapMatching, setUseMapMatching] = useState(true);
 
   useEffect(() => {
     let active = true;
-    setGt([]); setRaw([]); setFused([]); setAiFused([]); setOsmRoads(null); setMeta(null);
+    setGt([]); setRaw([]); setFused([]); setAiFused([]); setMeta(null);
 
     fetch(`/data/segments.json`)
       .then(r => r.json())
@@ -41,15 +48,13 @@ export default function MapView({ segmentId }: { segmentId: string }) {
       fetch(`/data/segment_${segmentId}_raw_dr.json`).then(r => r.json()),
       fetch(`/data/segment_${segmentId}_fused.json`).then(r => r.json()),
       fetch(`/data/segment_${segmentId}_ai_fused.json`).then(r => r.json()),
-      fetch(`/data/osm_roads_${segmentId}.json`).then(r => r.json()).catch(() => null),
     ])
-      .then(([gtData, rawData, fusedData, aiData, osmData]) => {
+      .then(([gtData, rawData, fusedData, aiData]) => {
         if (!active) return;
         setGt(gtData);
         setRaw(rawData);
         setFused(fusedData);
         setAiFused(aiData);
-        setOsmRoads(osmData);
       })
       .catch((err) => console.error("Failed to load tracking data:", err));
 
@@ -92,23 +97,13 @@ export default function MapView({ segmentId }: { segmentId: string }) {
 
   // Component 3: Road-Network Map-Matching Snap against independent OpenStreetMap
   const rawAiEndPt = turf.point([aiAtBlackoutEnd.lon, aiAtBlackoutEnd.lat]);
-  const snappedAiEndPt = (useMapMatching && osmRoads)
-    ? turf.nearestPointOnLine(osmRoads, rawAiEndPt)
+  const activeAiEndPt = (useMapMatching && aiAtBlackoutEnd.snap_lat !== undefined && aiAtBlackoutEnd.snap_lon !== undefined)
+    ? turf.point([aiAtBlackoutEnd.snap_lon, aiAtBlackoutEnd.snap_lat])
     : rawAiEndPt;
-  const activeAiEndPt = (useMapMatching && osmRoads) ? snappedAiEndPt : rawAiEndPt;
 
-  const displayAiPath: [number, number][] = useMemo(() => {
-    if (!useMapMatching || !osmRoads) {
-      return aiFused.map(p => [p.lat, p.lon] as [number, number]);
-    }
-    return aiFused.map(p => {
-      if (p.ts >= blackoutStartTs && p.ts <= blackoutEndTs) {
-        const snapped = turf.nearestPointOnLine(osmRoads, turf.point([p.lon, p.lat]));
-        return [snapped.geometry.coordinates[1], snapped.geometry.coordinates[0]] as [number, number];
-      }
-      return [p.lat, p.lon] as [number, number];
-    });
-  }, [useMapMatching, osmRoads, aiFused, blackoutStartTs, blackoutEndTs]);
+  const displayAiPath: [number, number][] = useMapMatching
+    ? aiFused.map(p => (p.snap_lat !== undefined && p.snap_lon !== undefined ? [p.snap_lat, p.snap_lon] as [number, number] : [p.lat, p.lon] as [number, number]))
+    : aiFused.map(p => [p.lat, p.lon] as [number, number]);
 
   const aiDriftAtEnd = turf.distance(
     turf.point([gtAtBlackoutEnd.lon, gtAtBlackoutEnd.lat]),
@@ -192,15 +187,6 @@ export default function MapView({ segmentId }: { segmentId: string }) {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* Genuine OpenStreetMap Road Layer */}
-          {osmRoads && (
-            <GeoJSON
-              key={`osm-${segmentId}`}
-              data={osmRoads}
-              style={{ color: "#94A3B8", weight: 2, opacity: 0.35 }}
-            />
-          )}
-
           {/* GT Track */}
           {gtBeforeBlackout.length > 1 && (
             <Polyline positions={gtBeforeBlackout} color="#10B981" weight={5} opacity={0.9}>
@@ -263,7 +249,6 @@ export default function MapView({ segmentId }: { segmentId: string }) {
         {/* Legend */}
         <div className="absolute top-3 right-3 bg-white/95 backdrop-blur p-3 rounded-lg shadow-lg border border-gray-200 z-[400] text-xs">
           <p className="font-bold mb-2 text-gray-700">Legend</p>
-          <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#94A3B8] rounded"></div> OpenStreetMap Network</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#10B981] rounded"></div> Ground Truth (GPS)</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-5 border-t-2 border-dashed border-[#EF4444]"></div> Raw DR (Drifting)</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#3B82F6] rounded"></div> Classical Kalman Filter</div>
