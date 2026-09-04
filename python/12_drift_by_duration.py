@@ -1,6 +1,7 @@
 import os, json
 import numpy as np
-from shapely.geometry import LineString, Point
+from shapely.geometry import shape, LineString, Point
+from shapely.strtree import STRtree
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -30,6 +31,7 @@ report_lines = [
     "=" * 85,
     "DRIFT vs BLACKOUT DURATION ANALYSIS (Trained on NVIDIA RTX 3050 GPU)",
     "Measured at GPS reacquisition after N seconds of complete GPS blackout",
+    "Road-snapping evaluated against genuine OpenStreetMap (OSM) road network",
     "ISRO Target: AI drift < 10% of distance traveled during blackout",
     "=" * 85,
     f"{'Segment':<8} {'Into BKT':>9} {'Road Dist':>11} {'Raw Drift':>11} {'AI Inert':>9} {'AI Snap':>9} {'Raw%':>7} {'AI%':>6} {'Snap%':>6} {'Pass?':>7}",
@@ -42,11 +44,14 @@ for seg in segments:
     raw = json.load(open(f"../public/data/segment_{seg}_raw_dr.json"))
     ai  = json.load(open(f"../public/data/segment_{seg}_ai_fused.json"))
     
+    # Load genuine independent OpenStreetMap road network for this segment
+    osm_path = f"../public/data/osm_roads_{seg}.json"
+    osm_data = json.load(open(osm_path))
+    road_lines = [shape(feat["geometry"]) for feat in osm_data["features"] if feat["geometry"]["type"] == "LineString"]
+    osm_tree = STRtree(road_lines)
+    
     bo_start = meta[seg]["blackout_start_ts"]
     bo_end   = meta[seg]["blackout_end_ts"]
-    
-    coords = [(p['lon'], p['lat']) for p in gt]
-    road_line = LineString(coords)
     
     all_results[seg] = {}
     for dur in offsets:
@@ -66,9 +71,11 @@ for seg in segments:
         ai_drift  = haversine(gt_at_query["lat"], gt_at_query["lon"],
                               ai_at_query["lat"],  ai_at_query["lon"])
         
-        # Component 3: Road-Network Map-Matching Snapping
+        # Component 3: Genuine Independent OpenStreetMap (OSM) Snapping
         pt_ai = Point(ai_at_query["lon"], ai_at_query["lat"])
-        snapped_ai = road_line.interpolate(road_line.project(pt_ai))
+        nearest_line_idx = osm_tree.nearest(pt_ai)
+        nearest_road = road_lines[nearest_line_idx]
+        snapped_ai = nearest_road.interpolate(nearest_road.project(pt_ai))
         snap_drift = haversine(gt_at_query["lat"], gt_at_query["lon"],
                                snapped_ai.y, snapped_ai.x)
         

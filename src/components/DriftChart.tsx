@@ -65,7 +65,7 @@ export default function DriftChart() {
                 {[
                   { name: "Constant Speed (Baseline)", mae: evalData.const.mae_kmh, rmse: evalData.const.rmse_kmh, color: "text-gray-600" },
                   { name: "Linear Regression", mae: evalData.lr.mae_kmh, rmse: evalData.lr.rmse_kmh, color: "text-blue-600" },
-                  { name: "Gradient Boosting (Ours, GPU Trained)", mae: evalData.gbr.mae_kmh, rmse: evalData.gbr.rmse_kmh, color: "text-indigo-600 font-bold" },
+                  { name: "XGBoost Regressor (Ours, NVIDIA RTX 3050 Trained)", mae: evalData.gbr.mae_kmh, rmse: evalData.gbr.rmse_kmh, color: "text-indigo-600 font-bold" },
                 ].map((m, i) => {
                   const impPct = i === 0 ? 0 : ((evalData.const.mae_kmh - m.mae) / evalData.const.mae_kmh * 100);
                   return (
@@ -84,7 +84,7 @@ export default function DriftChart() {
           </div>
 
           {/* Feature Importance */}
-          <h4 className="font-semibold text-gray-700 mt-5 mb-2">Feature Importances (Ensemble)</h4>
+          <h4 className="font-semibold text-gray-700 mt-5 mb-2">Feature Importances (XGBoost Ensemble)</h4>
           <div className="flex flex-col gap-1.5">
             {Object.entries(evalData.feature_importances).sort((a,b) => b[1]-a[1]).map(([feat, imp]) => (
               <div key={feat} className="flex items-center gap-3 text-sm">
@@ -131,7 +131,7 @@ export default function DriftChart() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                Road Map-Matching (Component 3)
+                OSM Road Snap (Component 3)
               </button>
             </div>
           </div>
@@ -139,11 +139,11 @@ export default function DriftChart() {
           <div className="mb-4 text-xs p-3 rounded-lg border bg-blue-50/60 border-blue-200 text-blue-900 leading-relaxed">
             {evalMode === "inertial" ? (
               <span>
-                <strong>Mode: Pure Inertial Dead Reckoning.</strong> Segment S2 passes ISRO criteria across <strong>all durations (1.4% to 9.7%)</strong>. On curved routes (S1 &amp; S3a), consumer phone gyroscopes exhibit open-loop heading divergence, proving why <strong>Component 3 (Map-Matching)</strong> is an essential ISRO requirement.
+                <strong>Mode: Pure Inertial Dead Reckoning (Component 2).</strong> Straight highway segment S2 passes ISRO criteria across <strong>all durations (1.4% to 9.7%)</strong> without any external map assistance. On curved routes (S1 &amp; S3a), smartphone sensors mounted upright in windshield cradles suffer from uncalibrated pitch tilt and open-loop gyro heading divergence.
               </span>
             ) : (
               <span>
-                <strong>Mode: Road-Network Map-Matching (Component 3).</strong> Project Brief 2 (Line 121) Turf.js road projection constraints snap the vehicle to the roadway network, bounding lateral angular divergence.
+                <strong>Mode: OpenStreetMap Road Map-Matching (Component 3).</strong> Snapped against genuine OpenStreetMap (OSM) Coventry road vector geometries. Lateral error is bounded to the nearest roadway centerline.
               </span>
             )}
           </div>

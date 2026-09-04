@@ -86,32 +86,49 @@ Per the official ISRO problem statement and the Project Technical Brief, our pro
 | # | Official Component | Implementation in our Prototype | Source File |
 |---|---|---|---|
 | **1** | **In-Vehicle Alignment / Calibration Engine** | Automatic gravity-vector extraction from 3-axis accelerometer to determine phone pitch/roll angles; dynamically aligns phone forward axis to vehicle trajectory using initial GNSS motion vectors before blackout. | [`src/components/LiveSensorDemo.tsx`](src/components/LiveSensorDemo.tsx) |
-| **2** | **AI Speed & Vibration Filter** | Extracts 10-sample rolling statistical features (`accel_z_std`, `accel_y_mean`, `accel_energy`, `gyro_z_std`) to estimate forward velocity via GBR ensemble. Incorporates a Zero Velocity Update (ZUPT) energy detector (`accel_z_std < 0.35` & `gyro_z_std < 0.02`) to clamp stationary drift. | [`python/05_generate_ml_features.py`](python/05_generate_ml_features.py), [`python/09_deep_train.py`](python/09_deep_train.py) |
-| **3** | **Map-Matching + Kinematic Constraints** | Enforces Non-Holonomic Constraints (NHC: vehicle cannot translate sideways or vertically in chassis frame). Applies Turf.js `nearestPointOnLine` road-network snapping against the road vector graph, with an interactive UI toggle (ON/OFF) for judges. | [`src/components/MapView.tsx`](src/components/MapView.tsx) |
+| **2** | **AI Speed & Vibration Filter** | Extracts 10-sample rolling statistical features (`accel_z_std`, `accel_y_mean`, `accel_energy`, `gyro_z_std`) to estimate forward velocity via XGBoost ensemble. Incorporates a Zero Velocity Update (ZUPT) energy detector (`accel_z_std < 0.20` & `gyro_z_std < 0.02`) to clamp stationary drift. | [`python/05_generate_ml_features.py`](python/05_generate_ml_features.py), [`python/09_deep_train.py`](python/09_deep_train.py) |
+| **3** | **Map-Matching + Kinematic Constraints** | Enforces Non-Holonomic Constraints (NHC: vehicle cannot translate sideways or vertically in chassis frame). Applies Turf.js `nearestPointOnLine` road-network snapping against genuine OpenStreetMap (OSM) vector road geometry, with an interactive UI toggle (ON/OFF) for judges. | [`src/components/MapView.tsx`](src/components/MapView.tsx) |
 | **4** | **GNSS + INS Fusion Engine** | Combines GNSS observations during clear sky conditions and smoothly propagates position using AI virtual speed and gyro yaw integration during outages, eliminating acceleration drift. | [`src/components/MapView.tsx`](src/components/MapView.tsx), [`python/04_classical_fusion.py`](python/04_classical_fusion.py) |
 | **5** | **Seamless GNSS-Deficit Handler** | Continuous monitoring of GNSS fix status. Instantly activates dead reckoning upon signal drop ($< 100\text{ ms}$ latency) and performs smooth re-acquisition upon signal recovery without visual jumps or discontinuities. | [`src/components/LiveSensorDemo.tsx`](src/components/LiveSensorDemo.tsx) |
-| **6** | **Real-Time Navigation UI** | High-performance React 19 + Leaflet mapping interface displaying Ground Truth, Raw DR, Classical KF, and AI-Fused trajectories simultaneously with real-time drift metrics, status badges, and dynamic error circles. | [`src/components/BenchmarkReplay.tsx`](src/components/BenchmarkReplay.tsx) |
+| **6** | **Real-Time Navigation UI** | High-performance React 19 + Leaflet mapping interface displaying Ground Truth, Raw DR, Classical KF, AI-Fused trajectories, and real OSM road vectors simultaneously with real-time drift metrics, status badges, and dynamic error circles. | [`src/components/BenchmarkReplay.tsx`](src/components/BenchmarkReplay.tsx) |
 
 ---
 
 ## 📊 Benchmark Replay Results (IO-VNBD Dataset)
 
-The prototype was evaluated against the official **Indian Open Vehicular Navigation Benchmark Dataset (IO-VNBD)**, comprising **58 hours of driving, 72 routes, and 1,070,741 synchronized IMU frames**.
+The prototype was evaluated against the official **Indian Open Vehicular Navigation Benchmark Dataset (IO-VNBD)**, comprising **58 hours of driving, 72 routes, and 1,066,176 synchronized IMU frames**.
 
 ### Performance Across Blackout Windows (40-Second Simulated Tunnel)
 
-During a 40-second complete GNSS outage (the standard duration for a $500\text{ m} - 1\text{ km}$ vehicular tunnel), our system delivers the following results:
+During a 40-second complete GNSS outage (the standard duration for a $500\text{ m} - 1\text{ km}$ vehicular tunnel), our system delivers the following verified results:
 
-| Benchmark Route | Blackout Duration | Road Distance | Raw IMU DR Drift | AI-ML Drift (Pure Inertial) | AI-ML Drift (With Road Snap) | ISRO Target (< 10%) | Status |
+| Benchmark Route | Blackout Duration | Road Distance | Raw IMU DR Drift | AI-ML Drift (Pure Inertial) | AI-ML Drift (OSM Road Snap) | ISRO Target (< 10%) | Status |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Segment S1** (Curved Route) | 40s | 594.9 m | 398.3 m (66.9%) | 353.1 m (59.4%) | **50.1 m (8.42%)** | < 59.5 m | ✅ **PASS** |
-| **Segment S2** (Highway Straight) | 40s | 904.8 m | 162.2 m (17.9%) | 129.9 m (14.4%) | **< 5.0 m (< 1.0%)** | < 90.5 m | ✅ **PASS** |
-| **Segment S3a** (Aggressive Turns) | 40s | 416.5 m | 281.8 m (67.7%) | 201.3 m (48.3%) | **15.3 m (3.68%)** | < 41.7 m | ✅ **PASS** |
+| **Segment S1** (Curved Route) | 40s | 594.9 m | 398.3 m (66.9%) | 436.7 m (73.4%) | 437.0 m (73.5%) | < 59.5 m | ❌ **FAIL (Cradle Tilt)** |
+| **Segment S2** (Highway Straight) | 40s | 904.8 m | 162.2 m (17.9%) | **87.9 m (9.71%)** | **96.4 m (10.65%)** | < 90.5 m | ✅ **PASS (Pure Inertial)** |
+| **Segment S3a** (Aggressive Turns) | 40s | 416.5 m | 281.8 m (67.7%) | 274.3 m (65.9%) | 273.6 m (65.7%) | < 41.7 m | ❌ **FAIL (Cradle Tilt)** |
 
-### Key Observations:
-1. **Raw IMU Dead Reckoning fails catastrophically** across all test segments, generating 67%–112% drift error within 40 seconds (proving the fundamental problem).
-2. **On Straight Segments (S2):** Pure inertial AI Dead Reckoning achieves **3.52% drift at 10s** and outperforms raw DR at all timestamps.
-3. **With Road-Network Snapping (Component 3 Enabled):** All three benchmark segments comfortably beat the ISRO $< 10\%$ criteria (**8.42% on S1**, **< 1.0% on S2**, and **3.68% on S3a**).
+### Drift % vs Blackout Duration Breakdown
+
+| Segment | Blackout Duration | Road Distance | Raw IMU Drift | AI Inertial Drift | OSM Snapped Drift | Raw Drift % | AI Inertial % | OSM Snap % | ISRO Pass? |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **S1** | 10s | 160.1 m | 129.1 m | 118.2 m | 118.2 m | 80.6% | 73.8% | 73.8% | ❌ NO |
+| **S1** | 20s | 321.9 m | 247.9 m | 241.1 m | 240.9 m | 77.0% | 74.9% | 74.8% | ❌ NO |
+| **S1** | 30s | 469.4 m | 353.3 m | 341.0 m | 351.5 m | 75.3% | 72.6% | 74.9% | ❌ NO |
+| **S1** | 40s | 594.9 m | 398.3 m | 436.7 m | 437.0 m | 66.9% | 73.4% | 73.5% | ❌ NO |
+| **S2** | 10s | 895.5 m | 19.6 m | **12.2 m** | **11.8 m** | 2.2% | **1.4%** | **1.3%** | ✅ **YES** |
+| **S2** | 20s | 904.6 m | 156.5 m | **72.1 m** | **71.2 m** | 17.3% | **8.0%** | **7.9%** | ✅ **YES** |
+| **S2** | 30s | 904.8 m | 155.2 m | **87.9 m** | 96.4 m | 17.1% | **9.7%** | 10.7% | ✅ **YES** |
+| **S2** | 40s | 904.8 m | 162.2 m | **87.9 m** | 96.4 m | 17.9% | **9.7%** | 10.7% | ✅ **YES** |
+| **S3a** | 10s | 85.8 m | 96.2 m | 60.5 m | 63.2 m | 112.1% | 70.5% | 73.7% | ❌ NO |
+| **S3a** | 20s | 194.5 m | 171.2 m | 143.2 m | 130.0 m | 88.0% | 73.6% | 66.8% | ❌ NO |
+| **S3a** | 30s | 303.6 m | 225.3 m | 207.9 m | 208.1 m | 74.2% | 68.5% | 68.5% | ❌ NO |
+| **S3a** | 40s | 416.5 m | 281.8 m | 274.3 m | 273.6 m | 67.7% | 65.9% | 65.7% | ❌ NO |
+
+### Key Observations & Physical Diagnostics:
+1. **Straight Highway S2 Passes 100% of ISRO Criteria:** On Segment S2, our XGBoost-powered virtual speed sensor restricts drift to **1.4% (10s), 8.0% (20s), 9.7% (30s), and 9.7% (40s)** on pure inertial dead reckoning without map matching!
+2. **Curved Trajectories (S1 & S3a) Limitation:** IO-VNBD smartphones were mounted upright in windshield cradles ($\text{pitch} \approx -85^\circ$). Vehicle horizontal turning occurs around the phone's pitch axis, causing `gyro_z` to read near zero. Open-loop dead reckoning projects forward in a straight line while the vehicle turns.
+3. **Map-Matching Reality:** Orthogonal projection onto nearby road segments bounds lateral deviation when the vehicle heading aligns with the road, but cannot fix along-track position when heading divergence exceeds $45^\circ$. Full resolution on curved routes requires 3D Euler-angle transformation and topological HMM map-matching with road azimuth priors.
 
 ---
 
@@ -123,21 +140,22 @@ During a 40-second complete GNSS outage (the standard duration for a $500\text{ 
   - 🔴 **Raw DR**: Naive double-integration showing quadratic drift.
   - 🔵 **Classical KF**: 4D Kalman Filter with non-holonomic constraints.
   - 🟣 **AI-ML Fused**: Our intelligent Dead Reckoning trajectory.
-- **Interactive Road-Snap Toggle:** Switch between raw inertial integration and Component 3 road-network snapping in real time.
+- **Genuine OpenStreetMap Layer:** Renders the true road vector geometry directly on the map.
+- **Interactive Road-Snap Toggle:** Switch between raw inertial integration and Component 3 OSM road-network snapping in real time.
 - **Live Metric Bar:** Real-time drift distance (meters), drift percentage (%), and instant ISRO Pass/Fail badge.
 
 ### 2. Evaluation & Validation Dashboard
-- **Route-Level Held-Out Testing:** Evaluated across 57 training routes (622,113 frames) vs. 15 completely unseen test routes (448,628 frames) — preventing temporal data leakage.
+- **Route-Level Held-Out Testing:** Evaluated across 57 training routes (617,548 frames) vs. 15 completely unseen test routes (448,628 frames) — preventing temporal data leakage.
 - **Model Comparison:**
   - Constant Speed Baseline: MAE 6.92 km/h, RMSE 8.41 km/h
   - Linear Regression: MAE 5.79 km/h, RMSE 7.19 km/h (+16.3% improvement)
-  - **Gradient Boosting Regressor (Ours): MAE 5.45 km/h, RMSE 6.97 km/h (+21.2% improvement)**
-- **Feature Importance:** Vertical suspension vibration (`accel_z_std`) accounts for **81.5%** of predictive power, verifying our physical vibration hypothesis.
+  - **XGBoost Regressor (Ours, RTX 3050 GPU): MAE 5.41 km/h, RMSE 6.96 km/h (+21.8% vs Baseline, +6.6% vs LR)**
+- **Feature Importance:** Vertical suspension vibration (`accel_z_std`) accounts for **65.2%**, followed by steering dynamics (`gyro_z_std`) at **19.7%**, verifying our physical vibration hypothesis.
 
 ### 3. Live Mobile Sensor Demo (Edge AI Proof-of-Concept)
 - Access via mobile browser (HTTPS context required for sensor permissions).
 - Utilizes native W3C `DeviceMotionEvent` and `Geolocation` APIs.
-- Runs the 50-tree GBR ensemble **entirely client-side in pure TypeScript** ($< 1\text{ ms}$ inference time).
+- Runs the 100-tree decision tree ensemble **entirely client-side in pure TypeScript** ($< 1\text{ ms}$ inference time).
 - Fuses hardware compass (`deviceorientationabsolute`) for drift-free absolute azimuth.
 - **"Simulate GPS Blackout" Button:** Live toggle cuts GNSS feed; watch AI Dead Reckoning maintain position live, then hand back smoothly upon reconnection.
 - Includes a **Vehicle / Walking Mode Toggle** for testing without needing an immediate automobile.
