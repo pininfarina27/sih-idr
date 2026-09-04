@@ -1,4 +1,4 @@
-﻿# AI-ML Intelligent Dead Reckoning (IDR) Prototype
+# AI-ML Intelligent Dead Reckoning (IDR) Prototype
 
 > **SIH 2026 Internal Hackathon**
 > **Problem Statement 26168** (ISRO, Dept. of Space)
@@ -28,18 +28,18 @@ graph TD
     subgraph Client-Side TS Fusion Engine
         MF[Motion Filter\nWindowed Variance/Energy]
         ML[AI-ML Correction\nGradient Boosting Regressor]
-        EKF[Classical Fusion\nExtended Kalman Filter]
+        KF[Classical Fusion\nKalman Filter]
         NHC[Kinematic Constraints\nNon-Holonomic]
     end
 
     IMU --> MF
     MF --> ML
-    GPS --> EKF
-    ML --> EKF
-    IMU --> EKF
-    NHC -.-> EKF
+    GPS --> KF
+    ML --> KF
+    IMU --> KF
+    NHC -.-> KF
 
-    EKF --> UI[React/Leaflet Map UI\nLive & Replay Dashboard]
+    KF --> UI[React/Leaflet Map UI\nLive & Replay Dashboard]
 ```
 
 ---

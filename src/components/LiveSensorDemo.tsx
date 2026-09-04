@@ -40,6 +40,7 @@ export default function LiveSensorDemo() {
     lastMotionTime: 0,
     watchId: null as number | null,
     compassFromHardware: false,
+    isBlackout: false,
   });
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export default function LiveSensorDemo() {
       (pos) => {
         const s = state.current;
         setGpsAccuracy(Math.round(pos.coords.accuracy));
-        if (!isBlackout) {
+        if (!s.isBlackout) {
           // Not in blackout: use GPS directly and recalibrate DR baseline
           s.lat = pos.coords.latitude;
           s.lon = pos.coords.longitude;
@@ -86,6 +87,8 @@ export default function LiveSensorDemo() {
 
   const handleStop = () => {
     setIsActive(false);
+    state.current.isBlackout = false;
+    setIsBlackout(false);
     if (state.current.watchId !== null) {
       navigator.geolocation.clearWatch(state.current.watchId);
       state.current.watchId = null;
@@ -98,7 +101,8 @@ export default function LiveSensorDemo() {
   };
 
   const toggleBlackout = () => {
-    const next = !isBlackout;
+    const next = !state.current.isBlackout;
+    state.current.isBlackout = next;
     setIsBlackout(next);
     setFusionMode(next ? "AI-DR" : "GPS");
     setStatus(next ? "BLACKOUT SIMULATED — Running AI Dead Reckoning..." : "GPS RESTORED — Recalibrating...");
@@ -134,7 +138,7 @@ export default function LiveSensorDemo() {
     if (s.accelY.length < 5) return;  // need a few samples
 
     // Only do DR when in blackout mode
-    if (!isBlackout) return;
+    if (!s.isBlackout) return;
 
     const mean = (a: number[]) => a.reduce((x,y) => x+y, 0) / a.length;
     const std  = (a: number[], m: number) =>

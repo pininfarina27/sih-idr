@@ -140,10 +140,10 @@ export default function MapView({ segmentId }: { segmentId: string }) {
             </Polyline>
           )}
 
-          {/* Classical EKF */}
+          {/* Classical Kalman Filter */}
           {fusedPath.length > 1 && (
             <Polyline positions={fusedPath} color="#3B82F6" weight={3} opacity={0.6}>
-              <Tooltip sticky>Classical Fused (EKF)</Tooltip>
+              <Tooltip sticky>Classical Fused (Kalman Filter)</Tooltip>
             </Polyline>
           )}
 
@@ -180,7 +180,7 @@ export default function MapView({ segmentId }: { segmentId: string }) {
           <p className="font-bold mb-2 text-gray-700">Legend</p>
           <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#10B981] rounded"></div> Ground Truth (GPS)</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-5 border-t-2 border-dashed border-[#EF4444]"></div> Raw DR (Drifting)</div>
-          <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#3B82F6] rounded"></div> Classical EKF</div>
+          <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#3B82F6] rounded"></div> Classical Kalman Filter</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#8B5CF6] rounded"></div> AI-ML Fused (GBR)</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-3 h-3 rounded-full bg-[#FBBF24] border border-[#92400E]"></div> GPS Lost</div>
           <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#34D399] border border-[#065F46]"></div> GPS Restored</div>

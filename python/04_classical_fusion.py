@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 import numpy as np
 import pandas as pd
@@ -14,17 +14,33 @@ def add_meters_to_latlon(lat, lon, dx, dy):
     new_lon = lon + (d_lon * 180.0 / np.pi)
     return new_lat, new_lon
 
+def apply_nhc(kf, heading_rad, sigma=0.2):
+    """
+    Non-Holonomic Constraint (NHC) pseudo-measurement.
+    Enforces that vehicle lateral velocity (perpendicular to heading) is zero:
+    v_lateral = v_x * cos(heading) - v_y * sin(heading) ≈ 0
+    """
+    H = np.array([[0, 0, np.cos(heading_rad), -np.sin(heading_rad)]])
+    z = np.array([0.0])
+    y = z - H @ kf.x
+    R_mat = np.array([[sigma**2]])
+    S = H @ kf.P @ H.T + R_mat
+    K = kf.P @ H.T @ np.linalg.inv(S)
+    kf.x = kf.x + (K @ y).flatten()
+    I = np.eye(4)
+    kf.P = (I - K @ H) @ kf.P
+
 def compute_fused_dr(segment_id):
-    print(f"Computing classical fusion for {segment_id}...")
+    print(f"Computing classical Kalman Filter fusion for {segment_id}...")
     df = pd.read_csv(f"data/{segment_id}.csv")
     
-    # State: [x, y, vx, vy]  - simplified for fast robust implementation
+    # State: [x, y, vx, vy]  - 4D linear Kalman Filter with NHC
     kf = KalmanFilter(dim_x=4, dim_z=4)
     kf.x = np.zeros(4)
     kf.P = np.eye(4) * 10.0
     
     # State transition will be updated dynamically with dt
-    # Measurement matrix
+    # Measurement matrix for full 4D GPS fix
     kf.H = np.eye(4)
     # Measurement noise (GPS is noisy)
     kf.R = np.eye(4) * 5.0
@@ -44,6 +60,7 @@ def compute_fused_dr(segment_id):
     def xy_to_latlon(dx, dy):
         return add_meters_to_latlon(origin_lat, origin_lon, dx, dy)
     
+    current_heading = df['gps_heading'].iloc[0] if not pd.isna(df['gps_heading'].iloc[0]) else 0
     prev_time = df['time_ms'].iloc[0] / 1000.0
     
     for i in range(len(df)):
@@ -63,10 +80,15 @@ def compute_fused_dr(segment_id):
         # Control input B and u (acceleration from IMU)
         lin_acc_y = row['accel_y'] - row['GRAVITY Y (m/s)'] if 'GRAVITY Y (m/s)' in row else row['accel_y']
         
-        # Very rough heading (assuming gyro integrates ok)
-        # We need a proper heading to rotate accel into world frame. For simplicity in the classical baseline:
-        heading = row['gps_heading'] if not pd.isna(row.get('gps_heading')) else 0
-        heading_rad = np.radians(heading)
+        # Heading tracking: GPS when available, gyro integration during blackout
+        if not row['blackout']:
+            if not pd.isna(row.get('gps_heading')):
+                current_heading = row['gps_heading']
+        else:
+            gyro_z = row['gyro_z'] if not pd.isna(row.get('gyro_z')) else 0
+            current_heading -= np.degrees(gyro_z * dt)
+            
+        heading_rad = np.radians(current_heading)
         
         ax = lin_acc_y * np.sin(heading_rad)
         ay = lin_acc_y * np.cos(heading_rad)
@@ -80,9 +102,6 @@ def compute_fused_dr(segment_id):
         # Prediction step
         kf.predict(B=B, u=u)
         
-        # Apply Non-Holonomic Constraint (NHC) pseudo-measurement during blackout
-        # The vehicle cannot move sideways. We enforce velocity perpendicular to heading is 0.
-        
         if not row['blackout']:
             # GNSS Update
             gps_x, gps_y = latlon_to_xy(row['lat'], row['lon'])
@@ -93,9 +112,9 @@ def compute_fused_dr(segment_id):
             z = np.array([gps_x, gps_y, gps_vx, gps_vy])
             kf.update(z)
         else:
-            # During blackout, we can do a ZUPT (Zero Velocity Update) if we detect no movement
-            # Or just rely on NHC
-            pass
+            # Apply Non-Holonomic Constraint (NHC) pseudo-measurement during blackout
+            # The vehicle cannot move sideways. We enforce velocity perpendicular to heading is ~0.
+            apply_nhc(kf, heading_rad, sigma=0.2)
             
         current_lat, current_lon = xy_to_latlon(kf.x[0], kf.x[1])
         current_speed = np.sqrt(kf.x[2]**2 + kf.x[3]**2)
@@ -105,7 +124,7 @@ def compute_fused_dr(segment_id):
             "lat": current_lat,
             "lon": current_lon,
             "speed_kmh": current_speed * 3.6,
-            "heading": heading
+            "heading": current_heading
         })
         
     with open(f"../public/data/segment_{segment_id}_fused.json", "w") as f:
@@ -115,4 +134,4 @@ if __name__ == "__main__":
     for sid in ["S1", "S2", "S3a"]:
         if os.path.exists(f"data/{sid}.csv"):
             compute_fused_dr(sid)
-    print("Classical fusion complete.")
+    print("Classical Kalman Filter fusion complete.")
