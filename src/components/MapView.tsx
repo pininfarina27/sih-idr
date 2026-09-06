@@ -19,6 +19,8 @@ interface Point {
   heading: number;
   snap_lat?: number;
   snap_lon?: number;
+  raw_lat?: number;
+  raw_lon?: number;
 }
 interface SegmentMeta { id: string; name: string; duration: number; blackout_start_ts: number; blackout_end_ts: number; }
 
@@ -96,23 +98,25 @@ export default function MapView({ segmentId }: { segmentId: string }) {
     : 1;
 
   // Component 3: Road-Network Map-Matching Snap against independent OpenStreetMap
-  const rawAiEndPt = turf.point([aiAtBlackoutEnd.lon, aiAtBlackoutEnd.lat]);
-  const activeAiEndPt = (useMapMatching && aiAtBlackoutEnd.snap_lat !== undefined && aiAtBlackoutEnd.snap_lon !== undefined)
-    ? turf.point([aiAtBlackoutEnd.snap_lon, aiAtBlackoutEnd.snap_lat])
-    : rawAiEndPt;
+  const rcpfAiEndPt = turf.point([aiAtBlackoutEnd.lon, aiAtBlackoutEnd.lat]);
+  const unconstrainedAiEndPt = turf.point([
+    aiAtBlackoutEnd.raw_lon ?? aiAtBlackoutEnd.lon,
+    aiAtBlackoutEnd.raw_lat ?? aiAtBlackoutEnd.lat,
+  ]);
+  const activeAiEndPt = useMapMatching ? rcpfAiEndPt : unconstrainedAiEndPt;
 
   const displayAiPath: [number, number][] = useMapMatching
-    ? aiFused.map(p => (p.snap_lat !== undefined && p.snap_lon !== undefined ? [p.snap_lat, p.snap_lon] as [number, number] : [p.lat, p.lon] as [number, number]))
-    : aiFused.map(p => [p.lat, p.lon] as [number, number]);
+    ? aiFused.map(p => [p.lat, p.lon] as [number, number])
+    : aiFused.map(p => [p.raw_lat ?? p.lat, p.raw_lon ?? p.lon] as [number, number]);
 
-  const aiDriftAtEnd = turf.distance(
-    turf.point([gtAtBlackoutEnd.lon, gtAtBlackoutEnd.lat]),
-    activeAiEndPt,
-    { units: "meters" }
-  );
+  const gtEndPt = turf.point([gtAtBlackoutEnd.lon, gtAtBlackoutEnd.lat]);
+
+  const rcpfDriftAtEnd = turf.distance(gtEndPt, rcpfAiEndPt, { units: "meters" });
+  const unconstrainedDriftAtEnd = turf.distance(gtEndPt, unconstrainedAiEndPt, { units: "meters" });
+  const aiDriftAtEnd = useMapMatching ? rcpfDriftAtEnd : unconstrainedDriftAtEnd;
 
   const rawDriftAtEnd = turf.distance(
-    turf.point([gtAtBlackoutEnd.lon, gtAtBlackoutEnd.lat]),
+    gtEndPt,
     turf.point([rawAtBlackoutEnd.lon, rawAtBlackoutEnd.lat]),
     { units: "meters" }
   );
@@ -143,13 +147,13 @@ export default function MapView({ segmentId }: { segmentId: string }) {
             }`}
           >
             <span>OSM Road Snap (Component 3):</span>
-            <span className="underline">{useMapMatching ? "ON (OpenStreetMap)" : "OFF (Raw DR)"}</span>
+            <span className="underline">{useMapMatching ? "ON (OpenStreetMap)" : "OFF (Pure Inertial)"}</span>
           </button>
         </div>
         <div className="text-xs text-gray-500">
           {useMapMatching 
             ? "✨ Snapping to genuine OpenStreetMap road network — lateral drift bounded by road vectors." 
-            : "⚠️ Unconstrained Dead Reckoning — showing raw inertial drift physics."}
+            : "⚠️ Pure Inertial Dead Reckoning — unconstrained open-loop gyro heading divergence."}
         </div>
       </div>
 
@@ -164,12 +168,20 @@ export default function MapView({ segmentId }: { segmentId: string }) {
           <div className="text-xl font-bold text-gray-800">{blackoutDistance.toFixed(1)} m</div>
         </div>
         <div className="bg-white border rounded-lg p-3 shadow-sm">
-          <div className="text-xs text-gray-500 font-medium">AI Drift at Reacquisition</div>
+          <div className="text-xs text-gray-500 font-medium">
+            {useMapMatching ? "AI Drift at Reacquisition" : "Pure Inertial Drift at Reacq."}
+          </div>
           <div className="text-xl font-bold text-gray-800">{aiDriftAtEnd.toFixed(1)} m</div>
-          <div className="text-xs text-gray-400">(Raw DR: {rawDriftAtEnd.toFixed(1)} m)</div>
+          <div className="text-xs text-gray-400">
+            {useMapMatching 
+              ? `(Pure DR: ${unconstrainedDriftAtEnd.toFixed(1)} m | Naive: ${rawDriftAtEnd.toFixed(1)} m)` 
+              : `(With OSM RCPF: ${rcpfDriftAtEnd.toFixed(1)} m | Naive: ${rawDriftAtEnd.toFixed(1)} m)`}
+          </div>
         </div>
         <div className={`rounded-lg p-3 shadow-sm border ${isroPassed ? "bg-green-50 border-green-300" : "bg-red-50 border-red-200"}`}>
-          <div className="text-xs text-gray-600 font-medium">AI Drift % (ISRO &lt; 10%)</div>
+          <div className="text-xs text-gray-600 font-medium">
+            {useMapMatching ? "AI Drift % (ISRO < 10%)" : "Pure DR Drift % (ISRO < 10%)"}
+          </div>
           <div className={`text-xl font-bold ${isroPassed ? "text-green-700" : "text-red-700"}`}>
             {aiDriftPct.toFixed(2)}%
           </div>
@@ -180,15 +192,29 @@ export default function MapView({ segmentId }: { segmentId: string }) {
       </div>
 
       {/* Physics & Kinematic Context Panel (RCPF) */}
-      <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-emerald-50 border border-indigo-100 rounded-lg p-3 text-xs flex flex-wrap items-center justify-between gap-2 shadow-xs">
+      <div className={`border rounded-lg p-3 text-xs flex flex-wrap items-center justify-between gap-2 shadow-xs transition-colors ${
+        useMapMatching
+          ? "bg-gradient-to-r from-indigo-50 via-purple-50 to-emerald-50 border-indigo-100"
+          : "bg-gradient-to-r from-amber-50 via-orange-50 to-red-50 border-amber-200"
+      }`}>
         <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 bg-indigo-600 text-white font-bold rounded text-[10px] uppercase tracking-wide">RCPF Core</span>
-          <span className="font-semibold text-gray-800">AI Speed Filter (XGBoost GPU) + Road-Constrained Particle Filter</span>
+          <span className={`px-2 py-0.5 font-bold rounded text-[10px] uppercase tracking-wide text-white ${
+            useMapMatching ? "bg-indigo-600" : "bg-amber-600"
+          }`}>
+            {useMapMatching ? "RCPF Core" : "Pure Inertial DR"}
+          </span>
+          <span className="font-semibold text-gray-800">
+            {useMapMatching 
+              ? "AI Speed Filter (XGBoost GPU) + Road-Constrained Particle Filter" 
+              : "AI Speed Filter (Without OSM Road Network Constraints)"}
+          </span>
         </div>
         <div className="flex items-center gap-4 text-gray-600">
-          <span><strong className="text-gray-700">Kinematic Constraint:</strong> Non-Holonomic ($v_y=0$)</span>
-          <span><strong className="text-gray-700">Heading:</strong> OSM Vector Road Azimuth</span>
-          <span className="text-emerald-700 font-semibold">✨ ISRO Compliant (&lt;10% drift)</span>
+          <span><strong className="text-gray-700">Kinematic Constraint:</strong> {useMapMatching ? "Non-Holonomic ($v_y=0$)" : "Open-Loop Integration"}</span>
+          <span><strong className="text-gray-700">Heading:</strong> {useMapMatching ? "OSM Vector Road Azimuth" : "Raw Gyroscope (Yaw Drift)"}</span>
+          <span className={useMapMatching ? "text-emerald-700 font-semibold" : "text-amber-700 font-semibold"}>
+            {useMapMatching ? "✨ ISRO Compliant (<10% drift)" : "⚠️ Heading Divergence (Component 3 Required)"}
+          </span>
         </div>
       </div>
 
@@ -234,7 +260,7 @@ export default function MapView({ segmentId }: { segmentId: string }) {
           {/* AI-ML Fused Track */}
           {displayAiPath.length > 1 && (
             <Polyline positions={displayAiPath} color="#8B5CF6" weight={5} opacity={0.85}>
-              <Tooltip sticky>{useMapMatching ? "AI-ML + RCPF (XGBoost + Road-Constrained Particle Filter)" : "AI-ML Fused (Raw XGBoost Dead Reckoning)"}</Tooltip>
+              <Tooltip sticky>{useMapMatching ? "AI-ML + RCPF (XGBoost + Road-Constrained Particle Filter)" : "Pure Inertial DR (Without OSM Road Constraints)"}</Tooltip>
             </Polyline>
           )}
 
@@ -265,7 +291,7 @@ export default function MapView({ segmentId }: { segmentId: string }) {
           <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#10B981] rounded"></div> Ground Truth (GPS)</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-5 border-t-2 border-dashed border-[#EF4444]"></div> Raw DR (Drifting)</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#3B82F6] rounded"></div> Classical Kalman Filter</div>
-          <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#8B5CF6] rounded"></div> {useMapMatching ? "AI-ML + RCPF Fused" : "AI-ML Fused (Raw DR)"}</div>
+          <div className="flex items-center gap-2 mb-1"><div className="w-5 h-1 bg-[#8B5CF6] rounded"></div> {useMapMatching ? "AI-ML + RCPF Fused" : "Pure Inertial DR (OSM OFF)"}</div>
           <div className="flex items-center gap-2 mb-1"><div className="w-3 h-3 rounded-full bg-[#FBBF24] border border-[#92400E]"></div> GPS Lost</div>
           <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#34D399] border border-[#065F46]"></div> GPS Restored</div>
           <div className="mt-2 pt-2 border-t border-gray-100 text-gray-400">Purple circle = AI uncertainty at reacquisition</div>
