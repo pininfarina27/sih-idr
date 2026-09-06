@@ -4,6 +4,7 @@
 [![React 19](https://img.shields.io/badge/React-19.0-61DAFB?logo=react&style=for-the-badge)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript&style=for-the-badge)](https://www.typescriptlang.org/)
 [![ISRO PS 26168](https://img.shields.io/badge/ISRO-PS%2026168-orange?style=for-the-badge)](https://www.isro.gov.in/)
+[![Master Project Report](https://img.shields.io/badge/Project%20Report-PROJECT__REPORT.md-blueviolet?logo=markdown&style=for-the-badge)](PROJECT_REPORT.md)
 
 > **Smart India Hackathon (SIH) 2026 — Internal Screening Prototype**  
 > **Problem Statement ID:** 26168  
@@ -12,7 +13,8 @@
 > **Category / Theme:** Software / Smart Vehicles  
 > **Dataset:** IO-VNBD (Indian Open Vehicular Navigation Benchmark Dataset)  
 > **Live Web Application:** [https://sih-idr-n2uu.vercel.app](https://sih-idr-n2uu.vercel.app)  
-> **GitHub Repository:** [https://github.com/pininfarina27/sih-idr](https://github.com/pininfarina27/sih-idr)
+> **GitHub Repository:** [https://github.com/pininfarina27/sih-idr](https://github.com/pininfarina27/sih-idr)  
+> **📄 Master Project Report:** [PROJECT_REPORT.md](PROJECT_REPORT.md) (or [final_project_report.md](final_project_report.md)) — *Complete Dual-Audience Guide & Deep Technical Specification*
 
 ---
 
