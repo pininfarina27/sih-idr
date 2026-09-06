@@ -36,7 +36,8 @@ export default function LiveSensorDemo() {
 
   const state = useRef({
     lat: 0, lon: 0, heading: 0,
-    accelY: [] as number[], accelZ: [] as number[], gyroZ: [] as number[],
+    accelX: [] as number[], accelY: [] as number[], accelZ: [] as number[],
+    gyroX: [] as number[], gyroZ: [] as number[],
     lastMotionTime: 0,
     watchId: null as number | null,
     compassFromHardware: false,
@@ -126,10 +127,18 @@ export default function LiveSensorDemo() {
     const s = state.current;
     if (!e.accelerationIncludingGravity || !e.rotationRate) return;
 
+    s.accelX.push(e.accelerationIncludingGravity.x ?? 0);
     s.accelY.push(e.accelerationIncludingGravity.y ?? 0);
     s.accelZ.push(e.accelerationIncludingGravity.z ?? 0);
+    s.gyroX.push((e.rotationRate.beta ?? 0) * (Math.PI / 180.0));
     s.gyroZ.push((e.rotationRate.gamma ?? 0) * (Math.PI / 180.0));
-    if (s.accelY.length > 10) { s.accelY.shift(); s.accelZ.shift(); s.gyroZ.shift(); }
+    if (s.accelY.length > 20) {
+      s.accelX.shift();
+      s.accelY.shift();
+      s.accelZ.shift();
+      s.gyroX.shift();
+      s.gyroZ.shift();
+    }
 
     const now = Date.now();
     const dt = Math.min((now - (s.lastMotionTime || now)) / 1000.0, 0.5);
@@ -144,18 +153,38 @@ export default function LiveSensorDemo() {
     const std  = (a: number[], m: number) =>
       Math.sqrt(a.reduce((x,y) => x + (y-m)**2, 0) / a.length);
 
-    const ay_mean = mean(s.accelY);
-    const ay_std  = std(s.accelY, ay_mean);
-    const az_std  = std(s.accelZ, mean(s.accelZ));
-    const gz_std  = std(s.gyroZ,  mean(s.gyroZ));
-    const energy  = mean(s.accelY.map((v, i) => v*v + s.accelZ[i]*s.accelZ[i]));
+    // 1-second window (most recent 10 samples at ~10Hz)
+    const recentX  = s.accelX.slice(-10);
+    const recentY  = s.accelY.slice(-10);
+    const recentZ  = s.accelZ.slice(-10);
+    const recentGx = s.gyroX.slice(-10);
+    const recentGz = s.gyroZ.slice(-10);
 
-    const rawSpeed = predictSpeed([ay_mean, ay_std, az_std, gz_std, energy], model);
+    const ax_mean = mean(recentX);
+    const ax_std  = std(recentX, ax_mean);
+    const ay_mean = mean(recentY);
+    const ay_std  = std(recentY, ay_mean);
+    const az_mean = mean(recentZ);
+    const az_std  = std(recentZ, az_mean);
+    const gx_std  = std(recentGx, mean(recentGx));
+    const gz_std  = std(recentGz, mean(recentGz));
+
+    // 1-second and 2-second energy
+    const energy    = mean(recentY.map((v, i) => v*v + recentZ[i]*recentZ[i]));
+    const energy_2s = mean(s.accelY.map((v, i) => v*v + s.accelZ[i]*s.accelZ[i]));
+
+    // Model features order:
+    // ['accel_y_mean', 'accel_y_std', 'accel_z_std', 'gyro_z_std', 'accel_energy',
+    //  'accel_x_mean', 'accel_x_std', 'gyro_x_std', 'accel_energy_2s', 'accel_z_mean']
+    const rawSpeed = predictSpeed(
+      [ay_mean, ay_std, az_std, gz_std, energy, ax_mean, ax_std, gx_std, energy_2s, az_mean],
+      model
+    );
     const speed = mode === "walking" ? rawSpeed * 0.22 : rawSpeed;
 
     // Heading update only if compass not available
     if (!s.compassFromHardware) {
-      s.heading -= (mean(s.gyroZ) * 180 / Math.PI) * dt;
+      s.heading -= (mean(recentGz) * 180 / Math.PI) * dt;
     }
 
     const heading_rad = s.heading * Math.PI / 180.0;

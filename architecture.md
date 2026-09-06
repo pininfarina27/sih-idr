@@ -368,15 +368,16 @@ stateDiagram-v2
 ### 7.1 Model JSON Contract (`public/data/gbr_model.json`)
 ```json
 {
-  "features": ["accel_z_std", "gyro_z_std", "accel_energy", "accel_y_mean", "accel_y_std"],
-  "learning_rate": 0.1,
-  "init_value": 7.4321,
+  "features": ["accel_y_mean", "accel_y_std", "accel_z_std", "gyro_z_std", "accel_energy", "accel_x_mean", "accel_x_std", "gyro_x_std", "accel_energy_2s", "accel_z_mean"],
+  "learning_rate": 1.0,
+  "init": 3.4931,
   "trees": [
-    [
-      { "node_id": 0, "feature": 0, "threshold": 0.3412, "left": 1, "right": 2 },
-      { "node_id": 1, "value": -0.854 },
-      { "node_id": 2, "value": 1.241 }
-    ]
+    {
+      "feature": 2,
+      "threshold": 0.3139,
+      "left": { ... },
+      "right": { ... }
+    }
   ]
 }
 ```
@@ -402,17 +403,20 @@ stateDiagram-v2
 ```json
 {
   "segments": {
+    "S1": {
+      "10": { "road_dist_m": 160.1, "raw_pct": 80.61, "ai_pct": 9.36, "snap_pct": 9.38, "isro_pass": true },
+      "40": { "road_dist_m": 594.9, "raw_pct": 66.95, "ai_pct": 9.61, "snap_pct": 9.67, "isro_pass": true }
+    },
     "S2": {
-      "name": "Highway Straight",
-      "road_length_m": 904.8,
-      "durations": {
-        "10s": { "raw_drift_pct": 2.19, "ai_drift_pct": 1.36, "snapped_drift_pct": 1.32, "pass": true },
-        "20s": { "raw_drift_pct": 17.30, "ai_drift_pct": 7.97, "snapped_drift_pct": 7.87, "pass": true },
-        "30s": { "raw_drift_pct": 17.15, "ai_drift_pct": 9.71, "snapped_drift_pct": 10.65, "pass": true },
-        "40s": { "raw_drift_pct": 17.93, "ai_drift_pct": 9.71, "snapped_drift_pct": 10.65, "pass": true }
-      }
+      "10": { "road_dist_m": 895.5, "raw_pct": 2.19, "ai_pct": 1.28, "snap_pct": 0.81, "isro_pass": true },
+      "40": { "road_dist_m": 904.8, "raw_pct": 17.93, "ai_pct": 9.04, "snap_pct": 9.03, "isro_pass": true }
+    },
+    "S3a": {
+      "10": { "road_dist_m": 85.8, "raw_pct": 112.11, "ai_pct": 8.53, "snap_pct": 8.63, "isro_pass": true },
+      "40": { "road_dist_m": 416.5, "raw_pct": 67.67, "ai_pct": 0.74, "snap_pct": 0.74, "isro_pass": true }
     }
-  }
+  },
+  "durations": [10, 20, 30, 40]
 }
 ```
 

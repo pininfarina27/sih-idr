@@ -55,9 +55,9 @@ By directly predicting velocity $v_{\text{pred}}$, we convert a double-integrati
 
 2. **Evaluation & Validation Dashboard:**
    A scientifically honest, route-level held-out evaluation across 72 routes:
-   - Evaluates **XGBoost vs. Linear Regression vs. Constant Speed Baseline** on 15 completely unseen test routes.
-   - Dynamic bar chart showing XGBoost feature importances (`accel_z_std` dominant at **65.2%**, followed by `gyro_z_std` at **19.7%**).
-   - Full matrix of Drift % across 10s, 20s, 30s, and 40s blackout durations for all benchmark segments.
+    - Evaluates **XGBoost vs. Linear Regression vs. Constant Speed Baseline** on 15 completely unseen test routes.
+    - Dynamic bar chart showing XGBoost feature importances (`accel_z_std` dominant at **51.6%**, followed by `gyro_z_std` at **15.8%**, `accel_x_std` at **7.5%**, etc.).
+    - Full matrix of Drift % across 10s, 20s, 30s, and 40s blackout durations for all benchmark segments.
 
 3. **Live Mobile Sensor Demo (Edge AI Proof-of-Concept):**
    A real-time edge demonstration running directly in any smartphone browser (HTTPS required):
@@ -95,20 +95,25 @@ Analyzing the IO-VNBD 3-axis accelerometer data revealed:
   - Phone **Y-axis** points vertically downward along gravity.
   - Phone **X-axis** points to the right door.
   - Consequently, horizontal vehicle turns occurred around the phone's physical **X-axis** (pitch), while `gyro_z` captured near-zero turn rate.
-- **Scientific Implication:** On straight highway segments (e.g., **Segment S2**), heading remains nearly constant ($< 5^\circ$ turn), allowing the AI virtual speed sensor alone to achieve **1.4% to 9.7% drift across all blackout durations (10s–40s)**, comfortably passing ISRO's $< 10\%$ standard on pure inertial dead reckoning. However, on aggressive curved routes (e.g., **S1 and S3a**), open-loop integration of uncalibrated phone gyroscopes without 3D tilt compensation leads to heading divergence. This mathematically diagnoses why **Component 3 (Map-Matching + Kinematic Constraints)** is an indispensable requirement of the ISRO problem statement.
+- **Scientific Implication:** On straight highway segments (e.g., **Segment S2**), heading remains nearly constant ($< 5^\circ$ turn), allowing the AI virtual speed sensor alone to achieve **1.3% to 9.0% drift across all blackout durations (10s–40s)**, comfortably passing ISRO's $< 10\%$ standard on pure inertial dead reckoning. However, on aggressive curved routes (e.g., **S1 and S3a**), open-loop integration of uncalibrated phone gyroscopes without 3D tilt compensation leads to heading divergence. This mathematically diagnoses why **Component 3 (Map-Matching + Kinematic Constraints)** is an indispensable requirement of the ISRO problem statement.
 
 ### 3.4 Feature Engineering: The Chassis Vibration Hypothesis
-Instead of integrating raw linear acceleration, we extract statistical motion and vibration signatures across a **1-second (10-sample) sliding window**:
+Instead of integrating raw linear acceleration, we extract statistical motion and vibration signatures across multi-scale sliding windows (1-second / 10-sample and 2-second / 20-sample rolling windows):
 
 | Feature | Mathematical Definition | Physical Role | Importance |
 |---|---|---|:---:|
-| `accel_z_std` | $\sqrt{\frac{1}{N}\sum (a_z - \bar{a}_z)^2}$ | Vertical chassis bounce over road texture and tire interaction | **65.2%** |
-| `gyro_z_std` | $\sqrt{\frac{1}{N}\sum (\omega_z - \bar{\omega}_z)^2}$ | Steering micro-jitter and vehicle cornering dynamics | **19.7%** |
-| `accel_energy` | $\frac{1}{N}\sum (a_y^2 + a_z^2)$ | Total kinetic energy proxy across chassis suspension | **6.0%** |
-| `accel_y_mean` | $\frac{1}{N}\sum a_y$ | Smoothed longitudinal acceleration/deceleration trend | **5.7%** |
-| `accel_y_std` | $\sqrt{\frac{1}{N}\sum (a_y - \bar{a}_y)^2}$ | Forward longitudinal engine vibration harmonic | **3.4%** |
+| `accel_z_std` | $\sqrt{\frac{1}{N}\sum (a_z - \bar{a}_z)^2}$ | Vertical chassis bounce over road texture and tire interaction | **51.6%** |
+| `gyro_z_std` | $\sqrt{\frac{1}{N}\sum (\omega_z - \bar{\omega}_z)^2}$ | Steering micro-jitter and vehicle cornering dynamics | **15.8%** |
+| `accel_x_std` | $\sqrt{\frac{1}{N}\sum (a_x - \bar{a}_x)^2}$ | Lateral chassis sway and road cambers | **7.5%** |
+| `accel_energy_2s` | $\frac{1}{M}\sum (a_y^2 + a_z^2)$ | Long-horizon suspension vibration energy (2-second window) | **5.7%** |
+| `accel_x_mean` | $\frac{1}{N}\sum a_x$ | Mean lateral vehicle acceleration | **4.4%** |
+| `accel_y_mean` | $\frac{1}{N}\sum a_y$ | Smoothed longitudinal acceleration/deceleration trend | **4.3%** |
+| `gyro_x_std` | $\sqrt{\frac{1}{N}\sum (\omega_x - \bar{\omega}_x)^2}$ | Windshield cradle pitch micro-oscillation | **4.2%** |
+| `accel_energy` | $\frac{1}{N}\sum (a_y^2 + a_z^2)$ | Short-horizon kinetic energy proxy (1-second window) | **2.9%** |
+| `accel_y_std` | $\sqrt{\frac{1}{N}\sum (a_y - \bar{a}_y)^2}$ | Forward longitudinal engine vibration harmonic | **2.0%** |
+| `accel_z_mean` | $\frac{1}{N}\sum a_z$ | Longitudinal/gravity projection along cradle normal | **1.5%** |
 
-The dominance of `accel_z_std` (65.2%) and `gyro_z_std` (19.7%) corroborates our core hypothesis: vertical suspension vibration intensity and steering micro-jitter scale monotonically with vehicle ground speed.
+The dominance of `accel_z_std` (51.6%) and `gyro_z_std` (15.8%) corroborates our core hypothesis: vertical suspension vibration intensity and steering micro-jitter scale monotonically with vehicle ground speed.
 
 ### 3.5 Zero Velocity Update (ZUPT) Engine
 When a vehicle halts at traffic lights or in tunnel congestion, small engine idling vibrations can cause artificial speed predictions. We implemented a **ZUPT stationary gate**:
@@ -116,7 +121,7 @@ $$\text{If } \sigma(a_z) < 0.20\text{ m/s}^2 \quad \text{AND} \quad \sigma(\omeg
 This guarantees zero distance accumulation when the vehicle is stationary.
 
 ### 3.6 Client-Side Edge Inference Engine
-The trained 100-tree XGBoost Regressor is serialized into pure JSON (`public/data/gbr_model.json`). We developed a lightweight TypeScript tree-traversal evaluator that executes on every sensor tick:
+The trained 500-tree XGBoost Regressor is serialized into pure JSON (`public/data/gbr_model.json`). We developed a lightweight TypeScript tree-traversal evaluator that executes on every sensor tick:
 ```typescript
 function predictSpeed(features: number[]): number {
   let val = gbrModel.init_value;

@@ -56,7 +56,7 @@ graph TD
 
     subgraph Client-Side Fusion Pipeline (TypeScript)
         C1[Component 1: Alignment & Calibration\nGravity Vector Pitch/Roll + GPS Heading Lock]
-        C2[Component 2: AI Speed & Vibration Filter\nRolling Window Features + GBR Regressor + ZUPT Gating]
+        C2[Component 2: AI Speed & Vibration Filter\nRolling Window Features + XGBoost Regressor + ZUPT Gating]
         C3[Component 3: Map-Matching & NHC\nNon-Holonomic Lateral Lock + Turf.js Road Snap]
         C4[Component 4: GNSS+INS Fusion Core\nMulti-Track Kinematic Integrator]
         C5[Component 5: Seamless GNSS-Deficit Handler\nSub-second Mode Switch + Covariance Smooth Transition]
@@ -86,7 +86,7 @@ Per the official ISRO problem statement and the Project Technical Brief, our pro
 | # | Official Component | Implementation in our Prototype | Source File |
 |---|---|---|---|
 | **1** | **In-Vehicle Alignment / Calibration Engine** | Automatic gravity-vector extraction from 3-axis accelerometer to determine phone pitch/roll angles; dynamically aligns phone forward axis to vehicle trajectory using initial GNSS motion vectors before blackout. | [`src/components/LiveSensorDemo.tsx`](src/components/LiveSensorDemo.tsx) |
-| **2** | **AI Speed & Vibration Filter** | Extracts 10-sample rolling statistical features (`accel_z_std`, `accel_y_mean`, `accel_energy`, `gyro_z_std`) to estimate forward velocity via XGBoost ensemble. Incorporates a Zero Velocity Update (ZUPT) energy detector (`accel_z_std < 0.20` & `gyro_z_std < 0.02`) to clamp stationary drift. | [`python/05_generate_ml_features.py`](python/05_generate_ml_features.py), [`python/09_deep_train.py`](python/09_deep_train.py) |
+| **2** | **AI Speed & Vibration Filter** | Extracts 10 engineered rolling statistical features (including `accel_z_std`, `gyro_z_std`, `accel_energy_2s`, `accel_x_std`, etc.) to estimate forward velocity via a 500-tree XGBoost ensemble. Incorporates a Zero Velocity Update (ZUPT) energy detector (`accel_z_std < 0.20` & `gyro_z_std < 0.02`) to clamp stationary drift. | [`python/05_generate_ml_features.py`](python/05_generate_ml_features.py), [`python/09_deep_train.py`](python/09_deep_train.py) |
 | **3** | **Map-Matching + Kinematic Constraints** | Enforces Non-Holonomic Constraints (NHC: vehicle cannot translate sideways or vertically in chassis frame). Applies Turf.js `nearestPointOnLine` road-network snapping against genuine OpenStreetMap (OSM) vector road geometry, with an interactive UI toggle (ON/OFF) for judges. | [`src/components/MapView.tsx`](src/components/MapView.tsx) |
 | **4** | **GNSS + INS Fusion Engine** | Combines GNSS observations during clear sky conditions and smoothly propagates position using AI virtual speed and gyro yaw integration during outages, eliminating acceleration drift. | [`src/components/MapView.tsx`](src/components/MapView.tsx), [`python/04_classical_fusion.py`](python/04_classical_fusion.py) |
 | **5** | **Seamless GNSS-Deficit Handler** | Continuous monitoring of GNSS fix status. Instantly activates dead reckoning upon signal drop ($< 100\text{ ms}$ latency) and performs smooth re-acquisition upon signal recovery without visual jumps or discontinuities. | [`src/components/LiveSensorDemo.tsx`](src/components/LiveSensorDemo.tsx) |

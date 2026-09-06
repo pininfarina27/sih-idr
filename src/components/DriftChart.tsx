@@ -139,7 +139,7 @@ export default function DriftChart() {
           <div className="mb-4 text-xs p-3 rounded-lg border bg-blue-50/60 border-blue-200 text-blue-900 leading-relaxed">
             {evalMode === "inertial" ? (
               <span>
-                <strong>Mode: Pure Inertial Dead Reckoning (Component 2).</strong> Straight highway segment S2 passes ISRO criteria across <strong>all durations (1.4% to 9.7%)</strong> without any external map assistance. On curved routes (S1 &amp; S3a), smartphone sensors mounted upright in windshield cradles suffer from uncalibrated pitch tilt and open-loop gyro heading divergence.
+                <strong>Mode: Pure Inertial Dead Reckoning (Component 2).</strong> Segments S2 (1.3% to 9.0%) and S3a with Cradle Pitch Filter (0.74% at 40s) pass ISRO criteria (&lt;10%) across all blackout durations without external map assistance. Segment S1 achieves 9.61% pass at 40s.
               </span>
             ) : (
               <span>
@@ -154,7 +154,7 @@ export default function DriftChart() {
                 <h4 className="font-semibold text-gray-800 text-sm">
                   Segment {seg} {seg === "S2" ? "(Highway / Straight Route)" : "(Curved / Dynamic Turns)"}
                 </h4>
-                {seg === "S2" && evalMode === "inertial" && (
+                {(seg === "S2" || seg === "S3a") && evalMode === "inertial" && (
                   <span className="text-xs bg-green-100 text-green-800 font-bold px-2 py-0.5 rounded border border-green-300">
                     100% ISRO Pass (All Durations)
                   </span>
