@@ -110,6 +110,9 @@ with open("../results/drift_by_duration.txt", "w") as f:
 with open("../public/data/drift_results.json", "w") as f:
     json.dump({"segments": all_results, "durations": offsets}, f, indent=2)
 
+with open("../results/drift_results.json", "w") as f:
+    json.dump({"segments": all_results, "durations": offsets}, f, indent=2)
+
 # Chart
 colors = {"S1": "#6366F1", "S2": "#10B981", "S3a": "#F59E0B"}
 fig, axes = plt.subplots(1, 2, figsize=(13, 5), sharey=True)

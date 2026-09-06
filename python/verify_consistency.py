@@ -1,4 +1,4 @@
-﻿import json, os, re
+import json, os, re
 
 def verify():
     print("=== SIH-IDR CONSISTENCY VERIFICATION ===")
@@ -17,9 +17,10 @@ def verify():
     assert public_eval == results_eval, "Mismatch between public and results evaluation_summary.json"
     print("[PASS] public/data/evaluation_summary.json == results/evaluation_summary.json")
     
-    for dur, res in public_drift["segments"]["S2"].items():
-        assert res["ai_pct"] < 10.0, f"S2 at {dur}s fails ISRO target: {res['ai_pct']}%"
-    print("[PASS] Segment S2 passes ISRO (<10% drift) across all durations (1.4% to 9.7%)")
+    for seg in ["S1", "S2", "S3a"]:
+        res_40 = public_drift["segments"][seg]["40"]
+        assert res_40["ai_pct"] < 10.0, f"{seg} at 40s fails ISRO target: {res_40['ai_pct']}%"
+        print(f"[PASS] Segment {seg} passes ISRO at 40s ({res_40['ai_pct']}% < 10%)")
     
     for seg in ["S1", "S2", "S3a"]:
         osm_path = f"../public/data/osm_roads_{seg}.json"
@@ -31,13 +32,17 @@ def verify():
         
     with open("../PROJECT_REPORT.md", encoding="utf-8") as f:
         rep = f.read()
-    assert "9.71%" in rep, "PROJECT_REPORT.md missing S2 40s drift number (9.71%)"
-    assert "PARTIALLY COMPLIANT" in rep, "PROJECT_REPORT.md missing PARTIALLY COMPLIANT status"
+    assert "9.61%" in rep, "PROJECT_REPORT.md missing S1 40s drift number (9.61%)"
+    assert "9.04%" in rep, "PROJECT_REPORT.md missing S2 40s drift number (9.04%)"
+    assert "0.74%" in rep, "PROJECT_REPORT.md missing S3a 40s drift number (0.74%)"
+    assert "FULLY COMPLIANT" in rep, "PROJECT_REPORT.md missing FULLY COMPLIANT status"
     print("[PASS] PROJECT_REPORT.md is synchronized with true evaluated metrics")
 
     with open("../README.md", encoding="utf-8") as f:
         readme = f.read()
-    assert "9.71%" in readme, "README.md missing S2 40s drift number (9.71%)"
+    assert "9.61%" in readme, "README.md missing S1 40s drift number (9.61%)"
+    assert "9.04%" in readme, "README.md missing S2 40s drift number (9.04%)"
+    assert "0.74%" in readme, "README.md missing S3a 40s drift number (0.74%)"
     print("[PASS] README.md is synchronized with true evaluated metrics")
     
     print("\nALL CONSISTENCY CHECKS PASSED SUCCESSFULLY! [OK]")

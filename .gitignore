@@ -28,3 +28,6 @@ python/data/*.json
 results/*.png
 
 python/data/
+
+__pycache__/
+*.pyc

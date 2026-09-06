@@ -6,22 +6,27 @@
     "test_rows": 448628
   },
   "gbr": {
-    "mae_kmh": 5.41,
-    "rmse_kmh": 6.96
+    "mae_kmh": 5.15,
+    "rmse_kmh": 6.82
   },
   "lr": {
-    "mae_kmh": 5.79,
-    "rmse_kmh": 7.19
+    "mae_kmh": 5.71,
+    "rmse_kmh": 7.12
   },
   "const": {
     "mae_kmh": 6.92,
     "rmse_kmh": 8.41
   },
   "feature_importances": {
-    "accel_z_std": 65.2,
-    "gyro_z_std": 19.7,
-    "accel_energy": 6.0,
-    "accel_y_mean": 5.7,
-    "accel_y_std": 3.4
+    "accel_z_std": 51.6,
+    "gyro_z_std": 15.8,
+    "accel_x_std": 7.5,
+    "accel_energy_2s": 5.7,
+    "accel_x_mean": 4.4,
+    "accel_y_mean": 4.3,
+    "gyro_x_std": 4.2,
+    "accel_energy": 2.9,
+    "accel_y_std": 2.0,
+    "accel_z_mean": 1.5
   }
 }

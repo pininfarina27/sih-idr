@@ -18,6 +18,7 @@ The **AI-ML Intelligent Dead Reckoning (IDR)** system is architected as an end-t
 2. **Hybrid Kinematic-Learning Fusion:** Pure deep learning black boxes lack physical safety guarantees, while pure classical inertial navigation diverges quadratically ($t^2$) on noisy consumer MEMS sensors. Our architecture fuses learned forward velocity with physical kinematic constraints (NHC), zero-velocity updates (ZUPT), and orthogonal road network geometry.
 3. **Multi-Track Verification:** Real-time side-by-side computation of four simultaneous state trajectories (Ground Truth, Raw IMU Dead Reckoning, Classical Kalman Filter, and AI Fused) ensures complete transparency for technical evaluators.
 
+
 ```mermaid
 flowchart TB
     subgraph DataLayer [1. Sensor & Data Ingestion]
@@ -27,40 +28,43 @@ flowchart TB
         OSM["OpenStreetMap Vector Road GeoJSON<br/>(Genuine Road Centerlines)"]
     end
 
-    subgraph OfflinePipeline [2. Offline Training Pipeline (Python 3.11 + CUDA)]
+    subgraph OfflinePipeline [2. Offline Training Pipeline - Phase 2 RCPF Upgrade]
         direction TB
         Preprocess["02_preprocess.py<br/>Cleaning & Interpolation"]
-        FeatureGen["05_generate_ml_features.py<br/>Rolling Window Statistics"]
-        ModelTrain["06_train_ml.py / 09_deep_train.py<br/>XGBoost Regressor (RTX 3050 GPU)"]
-        ModelExport["07_export_model.py<br/>JSON Serialization (100 Trees)"]
+        FeatureGen["08_deep_feature_gen.py<br/>Rolling Window Features (10 cols)"]
+        GraphBuilder["13_build_osm_graph.py<br/>Directed Road Graph (NEW)"]
+        ModelTrain["09_deep_train.py<br/>XGBoost Stratified (RTX 3050 GPU)<br/>+ RCPF Blackout Track Generation"]
+        RCPF["14_rcpf.py<br/>Road-Constrained Particle Filter (NEW)"]
+        ModelExport["JSON Serialization<br/>(500 Trees)"]
         Evaluator["11_route_split_evaluate.py<br/>Held-Out Evaluation (57 vs 15 Routes)"]
         DriftGen["12_drift_by_duration.py<br/>10s-40s Blackout Drift Matrix"]
     end
 
-    subgraph ClientEdge [3. Edge Runtime Engine (TypeScript / React 19)]
+    subgraph ClientEdge [3. Edge Runtime Engine - TypeScript / React 19]
         direction TB
         subgraph PipelineExecution [Client Execution Pipeline]
             FIFOBuffer["10-Sample Rolling Window<br/>(1.0s History Buffer)"]
-            FeatureCalc["Feature Calculator<br/>(accel_z_std, gyro_z_std, energy, etc.)"]
+            FeatureCalc["Feature Calculator<br/>(10 features incl. accel_x, gyro_x)"]
             ZUPTGate{"ZUPT Energy Gate<br/>σ(a_z) < 0.20 m/s²?"}
-            TreeEngine["Edge Tree Traversal<br/>(100 Trees in < 0.8 ms)"]
-            StateProp["Kinematic State Propagator<br/>(Single Integration of Speed)"]
+            TreeEngine["Edge Tree Traversal<br/>(500 Trees in < 2 ms)"]
+            StateProp["Kinematic State Propagator<br/>(Speed Integration)"]
             SnapEngine["OSM Road-Matching Engine<br/>(Turf.js Orthogonal Projection)"]
         end
     end
 
     subgraph PresentationLayer [4. Presentation & Verification UI]
         direction TB
-        BenchmarkView["Benchmark Replay<br/>(4 Tracks: GT, Raw, KF, AI)"]
+        BenchmarkView["Benchmark Replay<br/>(4 Tracks: GT, Raw, KF, AI+RCPF)"]
         EvalDash["Evaluation Dashboard<br/>(Held-Out Metrics, Feature Importances)"]
         LiveDemo["Live Sensor Demo<br/>(W3C DeviceMotion & Blackout Simulation)"]
     end
 
     RawSensors --> FIFOBuffer
     Dataset --> Preprocess --> FeatureGen --> ModelTrain --> ModelExport --> TreeEngine
+    OSM --> GraphBuilder --> RCPF
+    RCPF --> ModelTrain
     ModelTrain --> Evaluator
     ModelTrain --> DriftGen
-    OSM --> SnapEngine
 
     FIFOBuffer --> FeatureCalc --> ZUPTGate
     ZUPTGate -- Yes: Stopped --> StateProp
@@ -75,6 +79,50 @@ flowchart TB
 ```
 
 ---
+
+## 1b. RCPF State Machine (Phase 2 Architecture)
+
+The Road-Constrained Particle Filter operates during the GPS blackout window only. Outside blackout, standard GPS fusion is used.
+
+```mermaid
+stateDiagram-v2
+    [*] --> GPSFusion : Normal operation
+
+    GPSFusion --> BlackoutEntry : GPS signal lost
+    note right of BlackoutEntry
+        Initialize N=500 particles
+        at last known GPS position.
+        Snap to nearest drivable road edge.
+    end note
+
+    BlackoutEntry --> Predict : Each 0.1s timestep
+    Predict --> TurnCheck : Advance particles along road
+    note right of Predict
+        ds = speed_model(imu_features) * 0.1s
+        Advance along road edge.
+        If end of edge: branch to connected edges.
+    end note
+
+    TurnCheck --> Reweight : |accel_x - grav_x| > 1.5 m/s²
+    TurnCheck --> Predict : No turn event
+    note right of TurnCheck
+        Turn right = positive accel_x
+        Turn left = negative accel_x
+        Matching branch: weight * 2.0
+        Opposing branch: weight * 0.1
+    end note
+
+    Reweight --> Resample : Every 50 steps (5s)
+    Predict --> Resample : Every 50 steps (5s)
+    Resample --> Predict : Continue blackout
+
+    Resample --> WeightedPosition : Output position estimate
+    WeightedPosition --> GPSFusion : GPS re-acquired
+```
+
+---
+
+
 
 ## 2. Directory & File Structure (Annotated)
 
@@ -93,10 +141,11 @@ c:\Users\ranjo\OneDrive\Documents\Teckathon2\sih-idr\
 ├── vercel.json                          # Vercel deployment routing & static cache headers
 ├── vite.config.ts                       # Vite bundler configuration
 │
-├── PRD.md                               # [NEW] Product Requirements Document (PS 26168)
-├── architecture.md                      # [NEW] This technical architecture specification
-├── rules.md                             # [NEW] Engineering rules, standards, and banned patterns
-├── memory.md                            # [NEW] Exhaustive project history, bug logs, and changes
+├── PRD.md                               # Product Requirements Document (PS 26168)
+├── architecture.md                      # This technical architecture specification
+├── rules.md                             # Engineering rules, standards, and banned patterns
+├── memory.md                            # Exhaustive project history, bug logs, and changes
+├── phases.md                            # [NEW] 5-phase RCPF implementation breakdown
 ├── PROJECT_REPORT.md                    # Official comprehensive hackathon submission report
 ├── README.md                            # Project overview, quickstart, and compliance guide
 │
@@ -110,17 +159,20 @@ c:\Users\ranjo\OneDrive\Documents\Teckathon2\sih-idr\
 │   ├── 02_preprocess.py                 # Resamples and synchronizes raw IO-VNBD CSVs to 10 Hz
 │   ├── 03_baseline_raw_dr.py            # Generates naive double-integration Dead Reckoning baseline
 │   ├── 04_classical_fusion.py           # 4D Kalman Filter state estimation with NHC constraints
-│   ├── 05_generate_ml_features.py       # Extracts rolling statistical features (with 3.6x unit fix)
+│   ├── 05_generate_ml_features.py       # Extracts rolling statistical features for S1/S2/S3a segments
 │   ├── 06_train_ml.py                   # Trains baseline GradientBoostingRegressor on CPU
 │   ├── 07_export_model.py               # Exports trained decision trees to JSON format
-│   ├── 08_deep_feature_gen.py           # Extracts deep features across all 72 IO-VNBD routes
-│   ├── 09_deep_train.py                 # Trains production XGBoost Regressor on NVIDIA GPU (CUDA)
+│   ├── 08_deep_feature_gen.py           # Extracts deep features across all 72 IO-VNBD routes [MODIFIED Phase 1]
+│   ├── 09_deep_train.py                 # Trains production XGBoost + RCPF track generation [MODIFIED Phase 1+3]
 │   ├── 10_evaluate_model.py             # Computes MAE/RMSE and test metrics on evaluation segments
 │   ├── 11_route_split_evaluate.py       # Rigorous held-out evaluation across 57 train vs 15 test routes
 │   ├── 12_drift_by_duration.py          # Computes drift matrix across 10s, 20s, 30s, 40s blackouts
+│   ├── 13_build_osm_graph.py            # [NEW Phase 2] Builds directed road graph from OSM GeoJSON
+│   ├── 14_rcpf.py                       # [NEW Phase 3] Road-Constrained Particle Filter core module
 │   ├── fetch_osm.py                     # Overpass API utility to fetch genuine OSM road geometries
 │   ├── verify_consistency.py            # Automated repository integrity & consistency test suite
 │   └── data/                            # Raw and intermediate CSV files (gitignored for size)
+
 │
 ├── public/                              # Static public assets served directly by Vite
 │   ├── favicon.svg                      # Application browser favicon

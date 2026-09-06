@@ -1,22 +1,28 @@
 
 ==========================================
-ROUTE-LEVEL HELD-OUT EVALUATION REPORT (XGBoost GPU)
+ROUTE-LEVEL HELD-OUT EVALUATION REPORT (XGBoost GPU — Phase-1 Model)
 (Honest split: 80% routes train / 20% routes test)
 ==========================================
 Train routes: 57  |  Test routes: 15
-Train rows:   622113   |  Test rows:  448628
+Train rows:   622,113   |  Test rows:  448,628
+Features:     10 (accel_y_mean, accel_y_std, accel_z_std, gyro_z_std, accel_energy, accel_x_mean, accel_x_std, gyro_x_std, accel_energy_2s, accel_z_mean)
 
 MODEL COMPARISON ON UNSEEN ROUTES:
 -------------------------------------------
                     MAE (km/h)   RMSE (km/h)
 Constant Speed:         6.92         8.41
-Linear Regression:      5.79         7.19
-XGBoost Ensemble:       5.41         6.96
+Linear Regression:      5.71         7.12
+XGBoost Ensemble:       5.15         6.82
 
 FEATURE IMPORTANCES (XGBoost):
 -------------------------------------------
-  accel_z_std         :  65.2%
-  gyro_z_std          :  19.7%
-  accel_energy        :   6.0%
-  accel_y_mean        :   5.7%
-  accel_y_std         :   3.4%
+  accel_z_std           :  51.6%
+  gyro_z_std            :  15.8%
+  accel_x_std           :   7.5%
+  accel_energy_2s       :   5.7%
+  accel_x_mean          :   4.4%
+  accel_y_mean          :   4.3%
+  gyro_x_std            :   4.2%
+  accel_energy          :   2.9%
+  accel_y_std           :   2.0%
+  accel_z_mean          :   1.5%
