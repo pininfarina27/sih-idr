@@ -243,7 +243,7 @@ Still need Phase 2+3 (RCPF) to reach < 10% target. The heading problem remains.
   - Add "Physics & Kinematic Context" panel displaying RCPF architecture & constraints
   - Update method label to "AI + Road-Constrained Particle Filter (RCPF)"
 
-- [ ] **5.2** Update memory.md — add Phase 13 (RCPF Breakthrough and Full ISRO Compliance)
+- [x] **5.2** Update memory.md — add Phase 13 (RCPF Breakthrough and Full ISRO Compliance)
 
 - [x] **5.3** Update architecture.md — add RCPF block to pipeline diagram and Mermaid flowchart
 
@@ -253,15 +253,15 @@ Still need Phase 2+3 (RCPF) to reach < 10% target. The heading problem remains.
 
 - [x] **5.6** pnpm build — must be zero errors, zero warnings (passed: 279ms build)
 
-- [ ] **5.7** git add -A && git commit && git push origin main
+- [x] **5.7** git add -A && git commit && git push origin main (committed b322366, pushed to main)
 
-- [ ] **5.8** Verify Vercel deployment at https://sih-idr-n2uu.vercel.app
+- [x] **5.8** Verify Vercel deployment at https://sih-idr-n2uu.vercel.app (verified live drift_results.json)
 
 ### Success Criteria
 - [x] pnpm build passes cleanly
-- [ ] Live site shows ISRO PASS on all 3 segments
+- [x] Live site shows ISRO PASS on all 3 segments
 - [x] All docs consistent with new results
-- [ ] GitHub commit clean with descriptive message
+- [x] GitHub commit clean with descriptive message
 
 ---
 
@@ -285,6 +285,6 @@ Still need Phase 2+3 (RCPF) to reach < 10% target. The heading problem remains.
 | Phase 2 | OSM Road Graph Builder | ✅ COMPLETE | S1: 1748 nodes/2992 edges, entry snap 4.9m |
 | Phase 3 | Particle Filter Core | ✅ COMPLETE | RCPF v3 with global heading & turn constraints |
 | Phase 4 | Integration and Benchmarking | ✅ COMPLETE | S1: 9.61% ✅, S2: 9.04% ✅, S3a: 0.74% ✅ |
-| Phase 5 | Web App + Docs Update | 🔄 IN PROGRESS | Build passing, docs updated, ready for commit |
+| Phase 5 | Web App + Docs Update | ✅ COMPLETE | All 5 phases completed, deployed & verified |
 
 **Legend:** ⬜ Not Started — 🔄 In Progress — ✅ Complete — ❌ Blocked
